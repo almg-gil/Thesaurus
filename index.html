@@ -128,7 +128,14 @@
 
     .page-shell {
       width: min(var(--page-width), calc(100vw - 56px));
+
+      /*
+       * 100vh funciona como alternativa para navegadores antigos.
+       * 100dvh usa a altura efetivamente disponível no navegador.
+       */
       height: calc(100vh - var(--header-height) - var(--strip-height));
+      height: calc(100dvh - var(--header-height) - var(--strip-height));
+
       margin: 0 auto;
       padding: 18px 0 22px;
       display: flex;
@@ -574,6 +581,10 @@
       line-height: 1.5;
     }
 
+    /*
+     * Ajustes por largura.
+     */
+
     @media (max-width: 1000px) {
       :root {
         --left-width: 420px;
@@ -599,6 +610,7 @@
 
       .portal-inner {
         width: min(100vw - 20px, var(--page-width));
+        height: auto;
         min-height: auto;
         padding: 14px 0;
       }
@@ -676,6 +688,195 @@
         grid-template-columns: 1fr;
       }
     }
+
+    /*
+     * Ajustes por altura.
+     *
+     * Um notebook pode ter boa largura, mas pouca altura disponível.
+     * Nesse caso, o cabeçalho, o aviso e a pesquisa são compactados
+     * para preservar mais espaço para a hierarquia e para os detalhes.
+     */
+
+    @media (max-height: 820px) and (min-width: 851px) {
+      :root {
+        --header-height: 72px;
+        --strip-height: 10px;
+      }
+
+      .portal-inner {
+        gap: 14px;
+      }
+
+      .portal-brand {
+        gap: 14px;
+      }
+
+      .portal-brand img {
+        height: 50px;
+      }
+
+      .portal-brand-title {
+        font-size: 25px;
+      }
+
+      .page-shell {
+        padding: 8px 0 10px;
+        gap: 8px;
+      }
+
+      .test-note {
+        padding: 6px 10px;
+        border-left-width: 4px;
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .search-card-header {
+        min-height: 34px;
+        padding: 0 12px;
+        font-size: 14px;
+      }
+
+      .search-icon {
+        width: 19px;
+        height: 19px;
+      }
+
+      .search-icon::before {
+        width: 10px;
+        height: 10px;
+      }
+
+      .search-icon::after {
+        width: 8px;
+        left: 11px;
+        top: 13px;
+      }
+
+      .search-card-body {
+        gap: 8px;
+        padding: 8px 12px;
+      }
+
+      .search-field label {
+        min-height: 36px;
+        padding: 0 12px;
+        font-size: 14px;
+      }
+
+      .search-field input {
+        min-height: 36px;
+        padding: 0 12px;
+        font-size: 14px;
+      }
+
+      button.primary {
+        padding: 7px 16px;
+        font-size: 14px;
+      }
+
+      button.light {
+        padding: 7px 14px;
+        font-size: 14px;
+      }
+
+      .workspace-title {
+        padding: 7px 10px;
+      }
+
+      .workspace-title strong {
+        font-size: 15px;
+      }
+
+      .workspace-title span {
+        font-size: 12px;
+      }
+
+      .left {
+        padding: 10px;
+      }
+
+      .tree-toolbar {
+        margin-bottom: 7px;
+      }
+
+      .tree-toolbar button {
+        padding: 5px 8px;
+        font-size: 13px;
+      }
+
+      .tree-item {
+        min-height: 27px;
+        font-size: 14px;
+      }
+
+      .term-label {
+        padding-top: 3px;
+        padding-bottom: 3px;
+        font-size: 14px;
+      }
+
+      .right {
+        padding: 12px 18px;
+      }
+
+      .term-header {
+        padding-bottom: 7px;
+        margin-bottom: 8px;
+      }
+
+      .term-header h1 {
+        font-size: 24px;
+      }
+
+      .summary-grid {
+        margin-bottom: 8px;
+      }
+
+      .summary-card {
+        padding: 7px 9px;
+      }
+
+      .summary-card strong {
+        font-size: 16px;
+      }
+
+      .accordion-list {
+        gap: 6px;
+      }
+
+      details.accordion summary {
+        padding: 8px 12px;
+      }
+
+      .accordion-content {
+        padding: 9px 12px;
+      }
+    }
+
+    /*
+     * Para telas muito baixas, a página passa a usar rolagem geral.
+     * Isso evita que a área de dados fique excessivamente comprimida.
+     */
+
+    @media (max-height: 650px) and (min-width: 851px) {
+      body {
+        overflow: auto;
+      }
+
+      .page-shell {
+        height: auto;
+        min-height: 560px;
+      }
+
+      .workspace {
+        min-height: 420px;
+      }
+
+      .workspace-body {
+        min-height: 360px;
+      }
+    }
   </style>
 </head>
 
@@ -702,24 +903,38 @@
           <span class="search-icon" aria-hidden="true"></span>
           <span>Pesquisar Thesaurus</span>
         </div>
+
         <span id="headerStatus">Carregando dados...</span>
       </div>
 
       <div class="search-card-body">
         <div class="search-field">
           <label for="searchInput">Assunto</label>
-          <input id="searchInput" type="search" placeholder="Digite um termo, definição, nota ou sinônimo" />
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Digite um termo, definição, nota ou sinônimo"
+          />
         </div>
 
-        <button id="searchBtn" class="primary" type="button">Pesquisar</button>
-        <button id="clearSearchBtn" class="light" type="button">Limpar</button>
+        <button id="searchBtn" class="primary" type="button">
+          Pesquisar
+        </button>
+
+        <button id="clearSearchBtn" class="light" type="button">
+          Limpar
+        </button>
       </div>
     </section>
 
     <section class="workspace">
       <div class="workspace-title">
         <strong>Resultado da consulta</strong>
-        <span>Selecione um termo na hierarquia para ver definições, notas, relacionamentos e objetos indexados.</span>
+
+        <span>
+          Selecione um termo na hierarquia para ver definições, notas,
+          relacionamentos e objetos indexados.
+        </span>
       </div>
 
       <div class="workspace-body">
@@ -727,8 +942,13 @@
           <div class="section-title">Hierarquia</div>
 
           <div class="tree-toolbar">
-            <button id="collapseBtn" type="button">Recolher</button>
-            <button id="expandClassesBtn" type="button">Expandir classes</button>
+            <button id="collapseBtn" type="button">
+              Recolher
+            </button>
+
+            <button id="expandClassesBtn" type="button">
+              Expandir classes
+            </button>
           </div>
 
           <div id="tree" class="tree-box">
@@ -736,7 +956,11 @@
           </div>
         </aside>
 
-        <div id="splitter" class="splitter" title="Arraste para redimensionar as áreas"></div>
+        <div
+          id="splitter"
+          class="splitter"
+          title="Arraste para redimensionar as áreas"
+        ></div>
 
         <section class="right">
           <div id="termArea">
@@ -754,6 +978,7 @@
     // A página precisa ser servida por HTTP/HTTPS para o fetch funcionar.
     // Ex.: GitHub Pages, IIS, Apache, Nginx, Live Server etc.
     // ============================================================
+
     const ICMG_TXT_URL = "dados/ICMG.txt";
 
     let state = {
@@ -775,6 +1000,7 @@
     const expandClassesBtn = document.getElementById("expandClassesBtn");
     const headerStatus = document.getElementById("headerStatus");
     const splitter = document.getElementById("splitter");
+
     const LAYOUT_KEY = "consulta_thesaurus_left_width";
 
     const ICMG_CLASSES_SEM_RAIZ = new Set([
@@ -824,7 +1050,10 @@
       });
 
       window.addEventListener("hashchange", () => {
-        const id = decodeURIComponent(location.hash.replace(/^#/, ""));
+        const id = decodeURIComponent(
+          location.hash.replace(/^#/, "")
+        );
+
         if (id && getTerm(id)) {
           openTerm(id, false);
         }
@@ -835,13 +1064,16 @@
 
     function runSearch() {
       const query = searchInput.value.trim();
+
       renderTree();
 
       if (!query) {
         return;
       }
 
-      const firstMatch = state.terms.find(term => matchesTerm(term, query));
+      const firstMatch = state.terms.find(term =>
+        matchesTerm(term, query)
+      );
 
       if (firstMatch) {
         openTerm(firstMatch.id);
@@ -850,19 +1082,41 @@
 
     function setLeftWidth(px) {
       const min = 300;
-      const pageRect = document.querySelector(".page-shell")?.getBoundingClientRect();
-      const pageWidth = pageRect ? pageRect.width : window.innerWidth;
-      const max = Math.max(420, pageWidth - 520);
-      const width = Math.min(Math.max(Number(px) || 500, min), max);
 
-      document.documentElement.style.setProperty("--left-width", `${width}px`);
-      localStorage.setItem(LAYOUT_KEY, String(width));
+      const pageRect = document
+        .querySelector(".page-shell")
+        ?.getBoundingClientRect();
+
+      const pageWidth = pageRect
+        ? pageRect.width
+        : window.innerWidth;
+
+      const max = Math.max(420, pageWidth - 520);
+
+      const width = Math.min(
+        Math.max(Number(px) || 500, min),
+        max
+      );
+
+      document.documentElement.style.setProperty(
+        "--left-width",
+        `${width}px`
+      );
+
+      localStorage.setItem(
+        LAYOUT_KEY,
+        String(width)
+      );
     }
 
     function initResizableLayout() {
-      if (!splitter) return;
+      if (!splitter) {
+        return;
+      }
 
-      const savedWidth = Number(localStorage.getItem(LAYOUT_KEY));
+      const savedWidth = Number(
+        localStorage.getItem(LAYOUT_KEY)
+      );
 
       if (savedWidth) {
         setLeftWidth(savedWidth);
@@ -872,36 +1126,57 @@
 
       splitter.addEventListener("pointerdown", event => {
         resizing = true;
+
         splitter.classList.add("resizing");
         document.body.classList.add("resizing");
+
         splitter.setPointerCapture(event.pointerId);
       });
 
       splitter.addEventListener("pointermove", event => {
-        if (!resizing) return;
+        if (!resizing) {
+          return;
+        }
 
-        const pageLeft = document.querySelector(".page-shell")?.getBoundingClientRect().left || 0;
+        const pageLeft =
+          document
+            .querySelector(".page-shell")
+            ?.getBoundingClientRect()
+            .left || 0;
+
         setLeftWidth(event.clientX - pageLeft);
       });
 
       function stopResize(event) {
-        if (!resizing) return;
+        if (!resizing) {
+          return;
+        }
 
         resizing = false;
+
         splitter.classList.remove("resizing");
         document.body.classList.remove("resizing");
 
         if (event?.pointerId !== undefined) {
           try {
-            splitter.releasePointerCapture(event.pointerId);
+            splitter.releasePointerCapture(
+              event.pointerId
+            );
           } catch {
-            // Sem ação: alguns navegadores já liberam automaticamente.
+            // Alguns navegadores liberam automaticamente.
           }
         }
       }
 
-      splitter.addEventListener("pointerup", stopResize);
-      splitter.addEventListener("pointercancel", stopResize);
+      splitter.addEventListener(
+        "pointerup",
+        stopResize
+      );
+
+      splitter.addEventListener(
+        "pointercancel",
+        stopResize
+      );
 
       splitter.addEventListener("dblclick", () => {
         setLeftWidth(500);
@@ -912,21 +1187,31 @@
       try {
         setStatus("Carregando...");
 
-        const response = await fetch(`${ICMG_TXT_URL}?v=${Date.now()}`, {
-          cache: "no-store"
-        });
+        const response = await fetch(
+          `${ICMG_TXT_URL}?v=${Date.now()}`,
+          {
+            cache: "no-store"
+          }
+        );
 
         if (!response.ok) {
-          throw new Error(`Não foi possível carregar ${ICMG_TXT_URL}. HTTP ${response.status}`);
+          throw new Error(
+            `Não foi possível carregar ${ICMG_TXT_URL}. HTTP ${response.status}`
+          );
         }
 
         const buffer = await response.arrayBuffer();
 
-        // O TXT original do ICMG costuma estar em Windows-1252.
-        // Se o arquivo estiver em UTF-8, troque "windows-1252" por "utf-8".
-        const text = new TextDecoder("windows-1252").decode(buffer);
+        /*
+         * O TXT original do ICMG costuma estar em Windows-1252.
+         * Se o arquivo estiver em UTF-8, troque por "utf-8".
+         */
+        const text = new TextDecoder(
+          "windows-1252"
+        ).decode(buffer);
 
-        const terms = montarTermosDaEstruturaIcmg(text);
+        const terms =
+          montarTermosDaEstruturaIcmg(text);
 
         state = {
           selectedId: null,
@@ -936,28 +1221,40 @@
 
         buildIndexes();
 
-        // Inicia com as classes principais recolhidas.
+        /*
+         * Inicia com as classes principais recolhidas.
+         */
         state.expanded = [];
 
-        const hashId = decodeURIComponent(location.hash.replace(/^#/, ""));
+        const hashId = decodeURIComponent(
+          location.hash.replace(/^#/, "")
+        );
+
         if (hashId && getTerm(hashId)) {
           state.selectedId = hashId;
           expandAncestors(hashId);
         } else {
-          state.selectedId = firstSelectableTermId();
+          state.selectedId =
+            firstSelectableTermId();
         }
 
         render();
 
-        setStatus(`${state.terms.length.toLocaleString("pt-BR")} termo(s)`);
+        setStatus(
+          `${state.terms.length.toLocaleString("pt-BR")} termo(s)`
+        );
       } catch (error) {
         console.error(error);
 
-        treeEl.innerHTML = '<div class="empty">Nenhum termo carregado.</div>';
+        treeEl.innerHTML =
+          '<div class="empty">Nenhum termo carregado.</div>';
+
         termArea.innerHTML = `
           <div class="error">
             <strong>Não foi possível carregar o arquivo do thesaurus.</strong><br>
-            Verifique se o arquivo <code>${escapeHtml(ICMG_TXT_URL)}</code> existe e se a página está sendo aberta por um servidor web.
+            Verifique se o arquivo
+            <code>${escapeHtml(ICMG_TXT_URL)}</code>
+            existe e se a página está sendo aberta por um servidor web.
             <br><br>
             Detalhe técnico: ${escapeHtml(error.message)}
           </div>
@@ -972,7 +1269,9 @@
     }
 
     function parentKey(parentId) {
-      return parentId ? String(parentId) : "__ROOT__";
+      return parentId
+        ? String(parentId)
+        : "__ROOT__";
     }
 
     function buildIndexes() {
@@ -981,7 +1280,10 @@
       termPathCache = new Map();
 
       for (const term of state.terms) {
-        termById.set(String(term.id), term);
+        termById.set(
+          String(term.id),
+          term
+        );
 
         const key = parentKey(term.parentId);
 
@@ -989,43 +1291,75 @@
           childrenByParent.set(key, []);
         }
 
-        childrenByParent.get(key).push(term);
+        childrenByParent
+          .get(key)
+          .push(term);
       }
 
       for (const children of childrenByParent.values()) {
-        children.sort((a, b) => displayTermName(a).localeCompare(displayTermName(b), "pt-BR"));
+        children.sort((a, b) =>
+          displayTermName(a).localeCompare(
+            displayTermName(b),
+            "pt-BR"
+          )
+        );
       }
     }
 
     function getTerm(id) {
-      if (!id) return null;
-      return termById.get(String(id)) || null;
+      if (!id) {
+        return null;
+      }
+
+      return (
+        termById.get(String(id)) ||
+        null
+      );
     }
 
     function childrenOf(parentId) {
-      return childrenByParent.get(parentKey(parentId)) || [];
+      return (
+        childrenByParent.get(
+          parentKey(parentId)
+        ) || []
+      );
     }
 
     function rootTermIds() {
-      return childrenOf(null).map(term => term.id);
+      return childrenOf(null).map(
+        term => term.id
+      );
     }
 
     function firstSelectableTermId() {
       const roots = childrenOf(null);
-      if (!roots.length) return null;
+
+      if (!roots.length) {
+        return null;
+      }
+
       return roots[0].id;
     }
 
     function displayTermName(term) {
-      if (!term) return "";
-      if (term.termoAnterior && term.termoAnterior !== term.termo) {
+      if (!term) {
+        return "";
+      }
+
+      if (
+        term.termoAnterior &&
+        term.termoAnterior !== term.termo
+      ) {
         return `${term.termo} (${term.termoAnterior})`;
       }
+
       return term.termo;
     }
 
     function termPath(term) {
-      if (!term) return "";
+      if (!term) {
+        return "";
+      }
 
       const cacheKey = String(term.id);
 
@@ -1037,28 +1371,48 @@
       let current = term;
       const guard = new Set();
 
-      while (current && !guard.has(current.id)) {
+      while (
+        current &&
+        !guard.has(current.id)
+      ) {
         guard.add(current.id);
         parts.push(displayTermName(current));
         current = getTerm(current.parentId);
       }
 
-      const path = parts.reverse().join(" / ");
-      termPathCache.set(cacheKey, path);
+      const path = parts
+        .reverse()
+        .join(" / ");
+
+      termPathCache.set(
+        cacheKey,
+        path
+      );
 
       return path;
     }
 
-    function openTerm(id, updateHash = true) {
+    function openTerm(
+      id,
+      updateHash = true
+    ) {
       const term = getTerm(id);
-      if (!term) return;
+
+      if (!term) {
+        return;
+      }
 
       state.selectedId = term.id;
+
       expandAncestors(term.id);
       render();
 
       if (updateHash) {
-        history.replaceState(null, "", `#${encodeURIComponent(term.id)}`);
+        history.replaceState(
+          null,
+          "",
+          `#${encodeURIComponent(term.id)}`
+        );
       }
     }
 
@@ -1066,14 +1420,26 @@
       let current = getTerm(termId);
       const guard = new Set();
 
-      while (current && current.parentId && !guard.has(current.id)) {
+      while (
+        current &&
+        current.parentId &&
+        !guard.has(current.id)
+      ) {
         guard.add(current.id);
 
-        if (!state.expanded.includes(current.parentId)) {
-          state.expanded.push(current.parentId);
+        if (
+          !state.expanded.includes(
+            current.parentId
+          )
+        ) {
+          state.expanded.push(
+            current.parentId
+          );
         }
 
-        current = getTerm(current.parentId);
+        current = getTerm(
+          current.parentId
+        );
       }
     }
 
@@ -1084,52 +1450,100 @@
     }
 
     function renderTree() {
-      const query = searchInput.value.trim();
+      const query =
+        searchInput.value.trim();
 
       treeEl.innerHTML = "";
 
       const roots = childrenOf(null);
 
       if (!roots.length) {
-        treeEl.innerHTML = '<div class="empty">Nenhum termo cadastrado.</div>';
+        treeEl.innerHTML =
+          '<div class="empty">Nenhum termo cadastrado.</div>';
+
         return;
       }
 
       let renderedCount = 0;
 
       for (const root of roots) {
-        renderedCount += renderTreeNode(root, 0, query);
+        renderedCount += renderTreeNode(
+          root,
+          0,
+          query
+        );
       }
 
       if (!renderedCount) {
-        treeEl.innerHTML = '<div class="empty">Nenhum termo encontrado para a pesquisa.</div>';
+        treeEl.innerHTML =
+          '<div class="empty">Nenhum termo encontrado para a pesquisa.</div>';
       }
     }
 
-    function renderTreeNode(term, level, query) {
-      if (query && !hasMatchingDescendant(term, query)) {
+    function renderTreeNode(
+      term,
+      level,
+      query
+    ) {
+      if (
+        query &&
+        !hasMatchingDescendant(term, query)
+      ) {
         return 0;
       }
 
       const children = childrenOf(term.id);
-      const expanded = state.expanded.includes(term.id) || Boolean(query);
 
-      const item = document.createElement("div");
-      item.className = "tree-item" + (term.id === state.selectedId ? " selected" : "");
-      item.style.paddingLeft = `${level * 18 + 4}px`;
+      const expanded =
+        state.expanded.includes(term.id) ||
+        Boolean(query);
 
-      const toggle = document.createElement("button");
+      const item =
+        document.createElement("div");
+
+      item.className =
+        "tree-item" +
+        (
+          term.id === state.selectedId
+            ? " selected"
+            : ""
+        );
+
+      item.style.paddingLeft =
+        `${level * 18 + 4}px`;
+
+      const toggle =
+        document.createElement("button");
+
       toggle.className = "toggle";
       toggle.type = "button";
-      toggle.textContent = children.length ? (expanded ? "▾" : "▸") : "•";
-      toggle.title = children.length ? (expanded ? "Recolher" : "Expandir") : "";
+
+      toggle.textContent = children.length
+        ? expanded
+          ? "▾"
+          : "▸"
+        : "•";
+
+      toggle.title = children.length
+        ? expanded
+          ? "Recolher"
+          : "Expandir"
+        : "";
+
       toggle.onclick = event => {
         event.stopPropagation();
 
-        if (!children.length) return;
+        if (!children.length) {
+          return;
+        }
 
-        if (state.expanded.includes(term.id)) {
-          state.expanded = state.expanded.filter(id => id !== term.id);
+        if (
+          state.expanded.includes(term.id)
+        ) {
+          state.expanded =
+            state.expanded.filter(
+              id => id !== term.id
+            );
         } else {
           state.expanded.push(term.id);
         }
@@ -1137,22 +1551,43 @@
         renderTree();
       };
 
-      const label = document.createElement("button");
+      const label =
+        document.createElement("button");
+
       label.className = "term-label";
       label.type = "button";
-      label.textContent = displayTermName(term);
+      label.textContent =
+        displayTermName(term);
+
       label.title = termPath(term);
-      label.onclick = () => openTerm(term.id);
+
+      label.onclick = () =>
+        openTerm(term.id);
 
       item.appendChild(toggle);
       item.appendChild(label);
 
-      const upMatches = matchingUpValues(term, query);
+      const upMatches =
+        matchingUpValues(term, query);
+
       if (upMatches.length) {
-        const badge = document.createElement("span");
-        badge.className = "search-match-badge";
-        badge.textContent = `UP: ${upMatches[0]}${upMatches.length > 1 ? ` +${upMatches.length - 1}` : ""}`;
-        badge.title = upMatches.join("; ");
+        const badge =
+          document.createElement("span");
+
+        badge.className =
+          "search-match-badge";
+
+        badge.textContent =
+          `UP: ${upMatches[0]}` +
+          (
+            upMatches.length > 1
+              ? ` +${upMatches.length - 1}`
+              : ""
+          );
+
+        badge.title =
+          upMatches.join("; ");
+
         item.appendChild(badge);
       }
 
@@ -1161,9 +1596,17 @@
       let count = 1;
 
       if (expanded) {
-        const childQuery = query && matchesTerm(term, query) ? "" : query;
+        const childQuery =
+          query && matchesTerm(term, query)
+            ? ""
+            : query;
+
         for (const child of children) {
-          count += renderTreeNode(child, level + 1, childQuery);
+          count += renderTreeNode(
+            child,
+            level + 1,
+            childQuery
+          );
         }
       }
 
@@ -1171,21 +1614,39 @@
     }
 
     function renderTermArea() {
-      const term = getTerm(state.selectedId);
+      const term = getTerm(
+        state.selectedId
+      );
 
       if (!term) {
-        termArea.innerHTML = '<div class="empty">Selecione um termo.</div>';
+        termArea.innerHTML =
+          '<div class="empty">Selecione um termo.</div>';
+
         return;
       }
 
-      const parent = getTerm(term.parentId);
-      const children = childrenOf(term.id);
-      const relatedTerms = (term.relacionados || []).map(getTerm).filter(Boolean);
-      const naoAutorizados = Array.isArray(term.relacionadosNaoAutorizados)
-        ? term.relacionadosNaoAutorizados
-        : [];
+      const parent = getTerm(
+        term.parentId
+      );
 
-      const links = objetosIndexadosLinks(term);
+      const children = childrenOf(
+        term.id
+      );
+
+      const relatedTerms =
+        (term.relacionados || [])
+          .map(getTerm)
+          .filter(Boolean);
+
+      const naoAutorizados =
+        Array.isArray(
+          term.relacionadosNaoAutorizados
+        )
+          ? term.relacionadosNaoAutorizados
+          : [];
+
+      const links =
+        objetosIndexadosLinks(term);
 
       termArea.innerHTML = `
         <div class="term-header">
@@ -1198,10 +1659,12 @@
             <strong>${children.length.toLocaleString("pt-BR")}</strong>
             <span>termo(s) específico(s)</span>
           </div>
+
           <div class="summary-card">
             <strong>${relatedTerms.length.toLocaleString("pt-BR")}</strong>
             <span>termo(s) relacionado(s)</span>
           </div>
+
           <div class="summary-card">
             <strong>${naoAutorizados.length.toLocaleString("pt-BR")}</strong>
             <span>sinônimo(s) não autorizado(s)</span>
@@ -1211,47 +1674,80 @@
         <div class="accordion-list">
           <details class="accordion" open>
             <summary>Definição</summary>
+
             <div class="accordion-content">
-              <div class="text-block">${escapeHtml(term.definicao || "—")}</div>
+              <div class="text-block">
+                ${escapeHtml(term.definicao || "—")}
+              </div>
             </div>
           </details>
 
           <details class="accordion">
             <summary>Notas</summary>
+
             <div class="accordion-content">
               <div class="field-block">
-                <span class="field-label">Nota Explicativa</span>
-                <div class="text-block">${escapeHtml(term.notaEscopo || "—")}</div>
+                <span class="field-label">
+                  Nota Explicativa
+                </span>
+
+                <div class="text-block">
+                  ${escapeHtml(term.notaEscopo || "—")}
+                </div>
               </div>
 
               <div class="field-block">
-                <span class="field-label">Nota Histórica</span>
-                <div class="text-block">${escapeHtml(term.notaUso || "—")}</div>
+                <span class="field-label">
+                  Nota Histórica
+                </span>
+
+                <div class="text-block">
+                  ${escapeHtml(term.notaUso || "—")}
+                </div>
               </div>
             </div>
           </details>
 
           <details class="accordion">
             <summary>Relacionamentos</summary>
+
             <div class="accordion-content">
               <div class="field-block">
-                <span class="field-label">Termo geral</span>
+                <span class="field-label">
+                  Termo geral
+                </span>
+
                 ${
                   parent
-                    ? `<button class="link-button" type="button" data-open-term="${escapeAttr(parent.id)}">${escapeHtml(displayTermName(parent))}</button>`
+                    ? `
+                      <button
+                        class="link-button"
+                        type="button"
+                        data-open-term="${escapeAttr(parent.id)}"
+                      >
+                        ${escapeHtml(displayTermName(parent))}
+                      </button>
+                    `
                     : '<span class="muted">—</span>'
                 }
               </div>
 
               <div class="field-block">
-                <span class="field-label">Termos específicos</span>
+                <span class="field-label">
+                  Termos específicos
+                </span>
+
                 ${
                   children.length
                     ? `
                       <ul class="small-list">
                         ${children.map(child => `
                           <li>
-                            <button class="link-button" type="button" data-open-term="${escapeAttr(child.id)}">
+                            <button
+                              class="link-button"
+                              type="button"
+                              data-open-term="${escapeAttr(child.id)}"
+                            >
                               ${escapeHtml(displayTermName(child))}
                             </button>
                           </li>
@@ -1263,23 +1759,39 @@
               </div>
 
               <div class="field-block">
-                <span class="field-label">Sinônimos não autorizados — UP</span>
+                <span class="field-label">
+                  Sinônimos não autorizados — UP
+                </span>
+
                 ${
                   naoAutorizados.length
-                    ? `<ul class="small-list">${naoAutorizados.map(up => `<li>${escapeHtml(up)}</li>`).join("")}</ul>`
+                    ? `
+                      <ul class="small-list">
+                        ${naoAutorizados.map(up => `
+                          <li>${escapeHtml(up)}</li>
+                        `).join("")}
+                      </ul>
+                    `
                     : '<span class="muted">—</span>'
                 }
               </div>
 
               <div class="field-block">
-                <span class="field-label">Descritores autorizados relacionados — TR</span>
+                <span class="field-label">
+                  Descritores autorizados relacionados — TR
+                </span>
+
                 ${
                   relatedTerms.length
                     ? `
                       <ul class="small-list">
                         ${relatedTerms.map(rel => `
                           <li>
-                            <button class="link-button" type="button" data-open-term="${escapeAttr(rel.id)}">
+                            <button
+                              class="link-button"
+                              type="button"
+                              data-open-term="${escapeAttr(rel.id)}"
+                            >
                               ${escapeHtml(displayTermName(rel))}
                             </button>
                           </li>
@@ -1294,15 +1806,41 @@
 
           <details class="accordion">
             <summary>Objetos indexados</summary>
+
             <div class="accordion-content">
               <div class="field-block">
-                <span class="field-label">Objetos indexados no portal da ALMG</span>
-                <div class="muted">Os links usam o termo selecionado como parâmetro de busca.</div>
+                <span class="field-label">
+                  Objetos indexados no portal da ALMG
+                </span>
+
+                <div class="muted">
+                  Os links usam o termo selecionado como parâmetro de busca.
+                </div>
 
                 <div class="object-links">
-                  <a href="${escapeAttr(links.normas)}" target="_blank" rel="noopener noreferrer">Normas</a>
-                  <a href="${escapeAttr(links.proposicoes)}" target="_blank" rel="noopener noreferrer">Proposições</a>
-                  <a href="${escapeAttr(links.pronunciamentos)}" target="_blank" rel="noopener noreferrer">Pronunciamentos</a>
+                  <a
+                    href="${escapeAttr(links.normas)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Normas
+                  </a>
+
+                  <a
+                    href="${escapeAttr(links.proposicoes)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Proposições
+                  </a>
+
+                  <a
+                    href="${escapeAttr(links.pronunciamentos)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Pronunciamentos
+                  </a>
                 </div>
               </div>
             </div>
@@ -1314,35 +1852,69 @@
     }
 
     function wireTermArea() {
-      termArea.querySelectorAll("[data-open-term]").forEach(button => {
-        button.onclick = () => openTerm(button.dataset.openTerm);
-      });
+      termArea
+        .querySelectorAll("[data-open-term]")
+        .forEach(button => {
+          button.onclick = () =>
+            openTerm(button.dataset.openTerm);
+        });
     }
 
     function objetosIndexadosLinks(term) {
-      const tag = encodeURIComponent(term?.termo || "");
+      const tag = encodeURIComponent(
+        term?.termo || ""
+      );
 
       return {
-        normas: `https://www.almg.gov.br/atividade-parlamentar/leis/legislacao-mineira?tag=${tag}`,
-        proposicoes: `https://www.almg.gov.br/atividade-parlamentar/projetos-de-lei/?tag=${tag}`,
-        pronunciamentos: `https://www.almg.gov.br/atividade-parlamentar/plenario/pronunciamentos?tag=${tag}`
+        normas:
+          `https://www.almg.gov.br/atividade-parlamentar/leis/legislacao-mineira?tag=${tag}`,
+
+        proposicoes:
+          `https://www.almg.gov.br/atividade-parlamentar/projetos-de-lei/?tag=${tag}`,
+
+        pronunciamentos:
+          `https://www.almg.gov.br/atividade-parlamentar/plenario/pronunciamentos?tag=${tag}`
       };
     }
 
-    function hasMatchingDescendant(term, query) {
-      if (!query) return true;
-      if (matchesTerm(term, query)) return true;
-      return childrenOf(term.id).some(child => hasMatchingDescendant(child, query));
+    function hasMatchingDescendant(
+      term,
+      query
+    ) {
+      if (!query) {
+        return true;
+      }
+
+      if (matchesTerm(term, query)) {
+        return true;
+      }
+
+      return childrenOf(term.id).some(
+        child =>
+          hasMatchingDescendant(
+            child,
+            query
+          )
+      );
     }
 
-    function matchesTerm(term, query) {
-      const normalizedQuery = normalizeSearchText(query);
+    function matchesTerm(
+      term,
+      query
+    ) {
+      const normalizedQuery =
+        normalizeSearchText(query);
 
-      if (!normalizedQuery) return true;
+      if (!normalizedQuery) {
+        return true;
+      }
 
-      const upTerms = Array.isArray(term.relacionadosNaoAutorizados)
-        ? term.relacionadosNaoAutorizados
-        : [];
+      const upTerms =
+        Array.isArray(
+          term.relacionadosNaoAutorizados
+        )
+          ? term.relacionadosNaoAutorizados
+          : [];
 
       const text = [
         term.termo,
@@ -1354,19 +1926,33 @@
         ...upTerms
       ].join(" ");
 
-      return normalizeSearchText(text).includes(normalizedQuery);
+      return normalizeSearchText(text)
+        .includes(normalizedQuery);
     }
 
-    function matchingUpValues(term, query) {
-      const normalizedQuery = normalizeSearchText(query);
+    function matchingUpValues(
+      term,
+      query
+    ) {
+      const normalizedQuery =
+        normalizeSearchText(query);
 
-      if (!normalizedQuery) return [];
+      if (!normalizedQuery) {
+        return [];
+      }
 
-      const upTerms = Array.isArray(term.relacionadosNaoAutorizados)
-        ? term.relacionadosNaoAutorizados
-        : [];
+      const upTerms =
+        Array.isArray(
+          term.relacionadosNaoAutorizados
+        )
+          ? term.relacionadosNaoAutorizados
+          : [];
 
-      return upTerms.filter(up => normalizeSearchText(up).includes(normalizedQuery));
+      return upTerms.filter(up =>
+        normalizeSearchText(up).includes(
+          normalizedQuery
+        )
+      );
     }
 
     function normalizeSearchText(value) {
@@ -1406,25 +1992,39 @@
     }
 
     function isClasseIcmgSemRaiz(classe) {
-      return ICMG_CLASSES_SEM_RAIZ.has(normalizeIcmgName(classe));
+      return ICMG_CLASSES_SEM_RAIZ.has(
+        normalizeIcmgName(classe)
+      );
     }
 
     function isClasseIcmgDescartada(classe) {
-      return ICMG_CLASSES_DESCARTADAS.has(normalizeIcmgName(classe));
+      return ICMG_CLASSES_DESCARTADAS.has(
+        normalizeIcmgName(classe)
+      );
     }
 
     function isTermoIcmgDescartado(termo) {
-      return ICMG_TERMOS_DESCARTADOS.has(normalizeIcmgName(termo));
+      return ICMG_TERMOS_DESCARTADOS.has(
+        normalizeIcmgName(termo)
+      );
     }
 
     function firstField(record, key) {
-      const values = record.fields[key] || [];
-      return String(values[0] || "").trim();
+      const values =
+        record.fields[key] || [];
+
+      return String(
+        values[0] || ""
+      ).trim();
     }
 
     function allFields(record, key) {
-      return (record.fields[key] || [])
-        .map(value => String(value || "").trim())
+      return (
+        record.fields[key] || []
+      )
+        .map(value =>
+          String(value || "").trim()
+        )
         .filter(Boolean);
     }
 
@@ -1439,7 +2039,9 @@
       let currentKey = null;
 
       function startRecord(kind, value) {
-        if (current) records.push(current);
+        if (current) {
+          records.push(current);
+        }
 
         current = {
           kind,
@@ -1447,11 +2049,16 @@
         };
 
         currentKey = kind;
-        current.fields[currentKey] = [String(value || "").trim()];
+
+        current.fields[currentKey] = [
+          String(value || "").trim()
+        ];
       }
 
       function addField(key, value) {
-        if (!current) return;
+        if (!current) {
+          return;
+        }
 
         currentKey = key;
 
@@ -1459,23 +2066,41 @@
           current.fields[currentKey] = [];
         }
 
-        current.fields[currentKey].push(String(value || "").trim());
+        current.fields[currentKey].push(
+          String(value || "").trim()
+        );
       }
 
       function appendToCurrentField(value) {
-        if (!current || !currentKey) return;
+        if (
+          !current ||
+          !currentKey
+        ) {
+          return;
+        }
 
-        const values = current.fields[currentKey];
+        const values =
+          current.fields[currentKey];
 
-        if (!values || !values.length) return;
+        if (
+          !values ||
+          !values.length
+        ) {
+          return;
+        }
 
-        const lastIndex = values.length - 1;
-        const line = String(value || "").trimEnd();
+        const lastIndex =
+          values.length - 1;
+
+        const line = String(
+          value || ""
+        ).trimEnd();
 
         if (!line.trim()) {
           values[lastIndex] += "\n";
         } else if (values[lastIndex]) {
-          values[lastIndex] += "\n" + line;
+          values[lastIndex] +=
+            "\n" + line;
         } else {
           values[lastIndex] = line;
         }
@@ -1483,13 +2108,22 @@
 
       for (const rawLine of lines) {
         const line = rawLine.trimEnd();
-        const match = line.match(/^\.\.([^:]+?)\.?:\s*(.*)$/);
+
+        const match = line.match(
+          /^\.\.([^:]+?)\.?:\s*(.*)$/
+        );
 
         if (match) {
-          const key = normalizeIcmgKey(match[1]);
-          const value = match[2] || "";
+          const key =
+            normalizeIcmgKey(match[1]);
 
-          if (key === "TERMO" || key === "NAO AUTORIZADO") {
+          const value =
+            match[2] || "";
+
+          if (
+            key === "TERMO" ||
+            key === "NAO AUTORIZADO"
+          ) {
             startRecord(key, value);
           } else {
             addField(key, value);
@@ -1499,30 +2133,56 @@
         }
       }
 
-      if (current) records.push(current);
+      if (current) {
+        records.push(current);
+      }
 
       return records;
     }
 
     function termoFromIcmgRecord(record) {
-      const termo = firstField(record, "TERMO");
-      const tq = firstField(record, "TQ");
-      const controle = firstField(record, "CONTROLE");
-      const classe = firstField(record, "CLASSE") || "Sem classe";
-      const tg = firstField(record, "TG");
+      const termo =
+        firstField(record, "TERMO");
 
-      const definicao = firstField(record, "DF");
+      const tq =
+        firstField(record, "TQ");
 
-      // NE = Nota Explicativa.
-      const notaExplicativa = allFields(record, "NE").join("\n\n");
+      const controle =
+        firstField(record, "CONTROLE");
 
-      // NH = Nota Histórica.
-      const notaHistorica = allFields(record, "NH").join("\n\n");
+      const classe =
+        firstField(record, "CLASSE") ||
+        "Sem classe";
 
-      // UP = Usado por / sinônimos não autorizados.
-      const usadosPor = allFields(record, "UP");
+      const tg =
+        firstField(record, "TG");
 
-      const id = controle ? `icmg-${controle}` : `icmg-${slugIcmg(termo)}`;
+      const definicao =
+        firstField(record, "DF");
+
+      /*
+       * NE = Nota Explicativa.
+       */
+      const notaExplicativa =
+        allFields(record, "NE")
+          .join("\n\n");
+
+      /*
+       * NH = Nota Histórica.
+       */
+      const notaHistorica =
+        allFields(record, "NH")
+          .join("\n\n");
+
+      /*
+       * UP = Usado por / sinônimos não autorizados.
+       */
+      const usadosPor =
+        allFields(record, "UP");
+
+      const id = controle
+        ? `icmg-${controle}`
+        : `icmg-${slugIcmg(termo)}`;
 
       return {
         id,
@@ -1541,102 +2201,207 @@
       };
     }
 
-    function montarTermosDaEstruturaIcmg(text) {
-      const records = parseIcmgTxt(text);
+    function montarTermosDaEstruturaIcmg(
+      text
+    ) {
+      const records =
+        parseIcmgTxt(text);
 
-      const authorizedRecords = records.filter(record => {
-        if (record.kind !== "TERMO") return false;
+      const authorizedRecords =
+        records.filter(record => {
+          if (
+            record.kind !== "TERMO"
+          ) {
+            return false;
+          }
 
-        const termo = firstField(record, "TERMO");
-        if (!termo) return false;
+          const termo =
+            firstField(
+              record,
+              "TERMO"
+            );
 
-        const classe = firstField(record, "CLASSE") || "Sem classe";
+          if (!termo) {
+            return false;
+          }
 
-        // Descarta termos estruturais que não devem aparecer na árvore.
-        if (isTermoIcmgDescartado(termo)) return false;
+          const classe =
+            firstField(
+              record,
+              "CLASSE"
+            ) || "Sem classe";
 
-        // Descarta classes que não devem aparecer nem como raiz nem como termo.
-        if (isClasseIcmgDescartada(classe)) return false;
+          /*
+           * Descarta termos estruturais que
+           * não devem aparecer na árvore.
+           */
+          if (
+            isTermoIcmgDescartado(termo)
+          ) {
+            return false;
+          }
 
-        // Evita importar o próprio nome da classe como termo filho/raiz.
-        if (normalizeIcmgName(termo) === normalizeIcmgName(classe)) return false;
+          /*
+           * Descarta classes que não devem
+           * aparecer como raiz nem como termo.
+           */
+          if (
+            isClasseIcmgDescartada(classe)
+          ) {
+            return false;
+          }
 
-        return true;
-      });
+          /*
+           * Evita importar o próprio nome
+           * da classe como termo filho.
+           */
+          if (
+            normalizeIcmgName(termo) ===
+            normalizeIcmgName(classe)
+          ) {
+            return false;
+          }
 
-      const terms = authorizedRecords.map(termoFromIcmgRecord);
+          return true;
+        });
+
+      const terms =
+        authorizedRecords.map(
+          termoFromIcmgRecord
+        );
 
       const byName = new Map();
       const byTq = new Map();
 
       for (const term of terms) {
-        byName.set(normalizeIcmgName(term.termo), term.id);
+        byName.set(
+          normalizeIcmgName(term.termo),
+          term.id
+        );
 
         if (term.conceito) {
-          byTq.set(normalizeIcmgName(term.conceito), term.id);
+          byTq.set(
+            normalizeIcmgName(
+              term.conceito
+            ),
+            term.id
+          );
         }
       }
 
-      const classes = Array.from(new Set(
-        terms
-          .map(term => term._classe || "Sem classe")
-          .filter(classe =>
-            classe &&
-            !isClasseIcmgSemRaiz(classe) &&
-            !isClasseIcmgDescartada(classe)
-          )
-      )).sort((a, b) => a.localeCompare(b, "pt-BR"));
-
-      const classTerms = classes.map(classe => ({
-        id: `classe-${slugIcmg(classe)}`,
-        parentId: null,
-        termo: classe,
-        termoAnterior: "",
-        conceito: "",
-        definicao: "Classe geral importada do documento ICMG.",
-        notaEscopo: "",
-        notaUso: "",
-        relacionados: [],
-        relacionadosNaoAutorizados: []
-      }));
-
-      const classIdByName = new Map(
-        classTerms.map(term => [normalizeIcmgName(term.termo), term.id])
+      const classes = Array.from(
+        new Set(
+          terms
+            .map(
+              term =>
+                term._classe ||
+                "Sem classe"
+            )
+            .filter(classe =>
+              classe &&
+              !isClasseIcmgSemRaiz(classe) &&
+              !isClasseIcmgDescartada(classe)
+            )
+        )
+      ).sort((a, b) =>
+        a.localeCompare(
+          b,
+          "pt-BR"
+        )
       );
 
+      const classTerms =
+        classes.map(classe => ({
+          id: `classe-${slugIcmg(classe)}`,
+          parentId: null,
+          termo: classe,
+          termoAnterior: "",
+          conceito: "",
+          definicao:
+            "Classe geral importada do documento ICMG.",
+          notaEscopo: "",
+          notaUso: "",
+          relacionados: [],
+          relacionadosNaoAutorizados: []
+        }));
+
+      const classIdByName =
+        new Map(
+          classTerms.map(term => [
+            normalizeIcmgName(term.termo),
+            term.id
+          ])
+        );
+
       for (const term of terms) {
-        const tg = term._tg || "";
-        const classe = term._classe || "Sem classe";
+        const tg =
+          term._tg || "";
 
-        const tgNorm = normalizeIcmgName(tg);
-        const classeNorm = normalizeIcmgName(classe);
+        const classe =
+          term._classe ||
+          "Sem classe";
 
-        const classId = classIdByName.get(classeNorm) || null;
+        const tgNorm =
+          normalizeIcmgName(tg);
+
+        const classeNorm =
+          normalizeIcmgName(classe);
+
+        const classId =
+          classIdByName.get(
+            classeNorm
+          ) || null;
 
         if (!tg) {
           term.parentId = classId;
-        } else if (tgNorm === classeNorm) {
+        } else if (
+          tgNorm === classeNorm
+        ) {
           term.parentId = classId;
-        } else if (byName.has(tgNorm)) {
-          term.parentId = byName.get(tgNorm);
-        } else if (byTq.has(tgNorm)) {
-          term.parentId = byTq.get(tgNorm);
+        } else if (
+          byName.has(tgNorm)
+        ) {
+          term.parentId =
+            byName.get(tgNorm);
+        } else if (
+          byTq.has(tgNorm)
+        ) {
+          term.parentId =
+            byTq.get(tgNorm);
         } else {
           term.parentId = classId;
         }
 
         const relatedIds = [];
 
-        for (const relatedName of term._tr || []) {
-          const relatedNorm = normalizeIcmgName(relatedName);
-          const relatedId = byName.get(relatedNorm) || byTq.get(relatedNorm);
+        for (
+          const relatedName of
+          term._tr || []
+        ) {
+          const relatedNorm =
+            normalizeIcmgName(
+              relatedName
+            );
 
-          if (relatedId && relatedId !== term.id && !relatedIds.includes(relatedId)) {
-            relatedIds.push(relatedId);
+          const relatedId =
+            byName.get(relatedNorm) ||
+            byTq.get(relatedNorm);
+
+          if (
+            relatedId &&
+            relatedId !== term.id &&
+            !relatedIds.includes(
+              relatedId
+            )
+          ) {
+            relatedIds.push(
+              relatedId
+            );
           }
         }
 
-        term.relacionados = relatedIds;
+        term.relacionados =
+          relatedIds;
 
         delete term._classe;
         delete term._tg;
