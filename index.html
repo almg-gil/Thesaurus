@@ -1054,11 +1054,15 @@
     // A ALMG recomenda intervalo minimo de um segundo entre requisicoes.
     const API_MIN_INTERVAL_MS = 1100;
 
+    // O endpoint /termos/lista e paginado.
+    // p = pagina; tp = quantidade de termos por pagina.
+    const API_PAGE_SIZE = 1000;
+
     const CACHE_DB_NAME = "thesaurus_almg_cache";
     const CACHE_DB_VERSION = 1;
     const CACHE_STORE_NAME = "snapshots";
     const CACHE_KEY = "thesaurus_atual";
-    const CACHE_SCHEMA_VERSION = 1;
+    const CACHE_SCHEMA_VERSION = 2;
 
     let state = {
       selectedId: null,
@@ -1365,8 +1369,7 @@
             : "Buscando atualizacao diaria na API..."
         );
 
-        const payload = await apiFetchJson(API_LIST_URL);
-        const rawTerms = extractList(payload);
+        const rawTerms = await carregarTodosOsTermosDaApi();
         const terms = adaptarListaDaApi(rawTerms);
 
         if (!terms.length) {
@@ -1688,6 +1691,56 @@
 
     function sleep(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function carregarTodosOsTermosDaApi() {
+      let pagina = 1;
+      const todos = [];
+
+      while (true) {
+        const url = new URL(API_LIST_URL);
+        url.searchParams.set("p", String(pagina));
+        url.searchParams.set("tp", String(API_PAGE_SIZE));
+
+        setStatus(
+          `Atualizando dados pela API... pagina ${pagina} (${todos.length.toLocaleString("pt-BR")} registro(s) recebidos)`
+        );
+
+        let payload;
+
+        try {
+          payload = await apiFetchJson(url.toString());
+        } catch (error) {
+          // Algumas APIs sinalizam o fim da paginacao com 400/404.
+          // Se ao menos uma pagina ja foi obtida, tratamos isso como fim.
+          if (
+            pagina > 1 &&
+            /HTTP\s+(400|404)\b/.test(String(error.message || ""))
+          ) {
+            break;
+          }
+
+          throw error;
+        }
+
+        const itensDaPagina = extractList(payload);
+
+        if (!itensDaPagina.length) {
+          break;
+        }
+
+        todos.push(...itensDaPagina);
+
+        // A ultima pagina vem com menos registros que o tamanho solicitado.
+        if (itensDaPagina.length < API_PAGE_SIZE) {
+          break;
+        }
+
+        pagina += 1;
+        // O intervalo minimo entre chamadas e aplicado dentro de apiFetchJson().
+      }
+
+      return todos;
     }
 
     function extractList(payload) {
