@@ -1030,7 +1030,7 @@
 
   <script>
     // ============================================================
-    // CONFIGURACAO DA API E DO CACHE
+    // CONFIGURAÇÃO DA API E DO CACHE
     // ============================================================
 
     const API_BASE_URL =
@@ -1055,14 +1055,29 @@
     const API_MIN_INTERVAL_MS = 1100;
 
     // O endpoint /termos/lista e paginado.
-    // p = pagina; tp = quantidade de termos por pagina.
+    // p = pagina; tp = quantidade solicitada por pagina.
+    // A coleta NAO presume que o servidor respeite exatamente esse tamanho.
     const API_PAGE_SIZE = 1000;
+    const API_MAX_PAGES = 2000;
+
+    // Referencia de integridade obtida do CSV atual do Thesaurus (11/08/2026).
+    // O endpoint /lista pode devolver apenas os descritores diretamente listados,
+    // enquanto os ancestrais estruturais aparecem nos caminhos de hierarquia.
+    // A validacao ocorre DEPOIS de reconstruir esses caminhos.
+    const MIN_EXPECTED_AUTHORIZED_TERMS = 4000;
+
+    const EXPECTED_TOP_BRANCHES = [
+      "Destinatários",
+      "Localidade Geográfica",
+      "Tema",
+      "Tempo"
+    ];
 
     const CACHE_DB_NAME = "thesaurus_almg_cache";
     const CACHE_DB_VERSION = 1;
     const CACHE_STORE_NAME = "snapshots";
     const CACHE_KEY = "thesaurus_atual";
-    const CACHE_SCHEMA_VERSION = 2;
+    const CACHE_SCHEMA_VERSION = 5;
 
     let state = {
       selectedId: null,
@@ -1071,6 +1086,7 @@
     };
 
     let termById = new Map();
+    let termByName = new Map();
     let childrenByParent = new Map();
     let termPathCache = new Map();
     let lastApiRequestFinishedAt = 0;
@@ -1307,7 +1323,8 @@
 
       if (
         cacheIsUsable &&
-        cached.cycleKey === currentCycle
+        cached.cycleKey === currentCycle &&
+        cached.complete !== false
       ) {
         setReadyStatus(cached.updatedAt, "cache");
       } else {
@@ -1340,25 +1357,33 @@
       setRefreshButtonBusy(true);
 
       const previousTerms = state.terms;
+      let previousSnapshot = null;
 
       try {
+        previousSnapshot = await readCache().catch(() => null);
+
         if (!force) {
-          const cached = await readCache();
           const cycle = getRefreshCycleKey(new Date());
 
           if (
-            cached &&
-            cached.schemaVersion === CACHE_SCHEMA_VERSION &&
-            cached.cycleKey === cycle &&
-            Array.isArray(cached.terms) &&
-            cached.terms.length
+            previousSnapshot &&
+            previousSnapshot.schemaVersion === CACHE_SCHEMA_VERSION &&
+            previousSnapshot.cycleKey === cycle &&
+            previousSnapshot.complete === true &&
+            Array.isArray(previousSnapshot.terms) &&
+            previousSnapshot.terms.length
           ) {
-            applyTerms(cached.terms, {
-              updatedAt: cached.updatedAt,
-              source: "cache"
+            applyTerms(previousSnapshot.terms, {
+              updatedAt: previousSnapshot.updatedAt,
+              source: "cache",
+              stats: previousSnapshot.stats
             });
 
-            setReadyStatus(cached.updatedAt, "cache");
+            setReadyStatus(
+              previousSnapshot.updatedAt,
+              "cache",
+              previousSnapshot.stats
+            );
             return;
           }
         }
@@ -1366,34 +1391,64 @@
         setStatus(
           reason === "manual"
             ? "Atualizando dados pela API..."
-            : "Buscando atualizacao diaria na API..."
+            : "Buscando atualização diária na API..."
         );
 
-        const rawTerms = await carregarTodosOsTermosDaApi();
-        const terms = adaptarListaDaApi(rawTerms);
+        const result = await carregarTodosOsTermosDaApi();
+        const adapted = adaptarListaDaApi(result.records);
+        const terms = adapted.terms;
 
-        if (!terms.length) {
+        const validation = validarEstruturaThesaurus(
+          terms,
+          previousSnapshot?.terms || previousTerms
+        );
+
+        if (!validation.ok) {
+          const detail = validation.errors.join(" | ");
+          const diagnostic =
+            `diagnóstico da coleta: ${adapted.stats.directAuthorizedRecords.toLocaleString("pt-BR")} ` +
+            `autorizado(s) direto(s), ${adapted.stats.hierarchyPathCount.toLocaleString("pt-BR")} ` +
+            `caminho(s) hierárquico(s), ${adapted.stats.recoveredHierarchyNodes.toLocaleString("pt-BR")} ` +
+            `nó(s) recuperado(s), ${result.stats.pagesFetched.toLocaleString("pt-BR")} página(s); ` +
+            `fim: ${result.stats.stopReason || "não informado"}`;
+
           throw new Error(
-            "A API respondeu, mas nenhum termo foi reconhecido."
+            "A atualização foi recusada porque a resposta da API parece incompleta. " +
+            detail + " | " + diagnostic
           );
         }
 
         const now = new Date();
+        const stats = {
+          ...result.stats,
+          ...adapted.stats,
+          descriptors: validation.descriptors,
+          activeDescriptors: validation.activeDescriptors,
+          inactiveDescriptors: validation.inactiveDescriptors,
+          mappedRemissives: validation.mappedRemissives,
+          roots: validation.roots,
+          orphanCount: validation.orphanCount
+        };
+
         const snapshot = {
           schemaVersion: CACHE_SCHEMA_VERSION,
           cycleKey: getRefreshCycleKey(now),
           updatedAt: now.toISOString(),
+          complete: true,
+          stats,
           terms
         };
 
+        // So substitui o cache depois de toda a validacao.
         await writeCache(snapshot);
 
         applyTerms(terms, {
           updatedAt: snapshot.updatedAt,
-          source: "api"
+          source: "api",
+          stats
         });
 
-        setReadyStatus(snapshot.updatedAt, "api");
+        setReadyStatus(snapshot.updatedAt, "api", stats);
       } catch (error) {
         console.error(error);
 
@@ -1403,7 +1458,7 @@
           previousTerms.length
         ) {
           setStatus(
-            `Falha ao atualizar; mantendo cache local. ${error.message}`
+            `Falha ao atualizar; mantendo o último cache válido. ${error.message}`
           );
         } else {
           treeEl.innerHTML =
@@ -1411,15 +1466,19 @@
 
           termArea.innerHTML = `
             <div class="error">
-              <strong>Nao foi possivel carregar o thesaurus pela API.</strong><br>
-              A pagina tentou consultar:<br>
+              <strong>Não foi possível carregar um snapshot válido do Thesaurus.</strong><br>
+              A página tentou consultar:<br>
               <code>${escapeHtml(API_LIST_URL)}</code>
               <br><br>
-              Detalhe tecnico: ${escapeHtml(error.message)}
+              Detalhe técnico: ${escapeHtml(error.message)}
               <br><br>
-              Se o navegador mencionar <strong>CORS</strong>, sera necessario
-              publicar a pagina no mesmo dominio autorizado ou usar um pequeno
-              proxy/backend no servidor da pagina.
+              A página não grava respostas incompletas no cache. Atualmente, a
+              referência de integridade é de pelo menos
+              <strong>${MIN_EXPECTED_AUTHORIZED_TERMS.toLocaleString("pt-BR")}</strong>
+              descritores autorizados e uma hierarquia sem termos órfãos.
+              <br><br>
+              Se o navegador mencionar <strong>CORS</strong>, será necessário
+              publicar a página em origem autorizada ou utilizar um proxy/backend.
             </div>
           `;
 
@@ -1467,13 +1526,40 @@
       }
     }
 
-    function setReadyStatus(updatedAt, source) {
-      const count = state.terms.length.toLocaleString("pt-BR");
+    function setReadyStatus(updatedAt, source, stats = null) {
+      const descriptors = state.terms.length;
+      const inactive = state.terms.filter(term => term.ativo === false).length;
+
+      const unauthorized = new Set();
+      for (const term of state.terms) {
+        for (const up of term.relacionadosNaoAutorizados || []) {
+          const value = String(up || "").trim();
+          if (value) unauthorized.add(normalizeIcmgName(value));
+        }
+      }
+
       const dateText = formatDateTime(updatedAt);
       const suffix = source === "api" ? "API" : "cache";
+      const pageInfo = stats?.pagesFetched
+        ? ` | ${stats.pagesFetched.toLocaleString("pt-BR")} página(s) da API`
+        : "";
+
+      const reconstructionInfo = stats?.directAuthorizedRecords != null
+        ? ` | ${Number(stats.directAuthorizedRecords).toLocaleString("pt-BR")} direto(s)` +
+          (stats.recoveredHierarchyNodes
+            ? ` + ${Number(stats.recoveredHierarchyNodes).toLocaleString("pt-BR")} recuperado(s) da hierarquia`
+            : "")
+        : "";
 
       setStatus(
-        `${count} termo(s) | atualizado em ${dateText} | ${suffix}`
+        `${descriptors.toLocaleString("pt-BR")} descritor(es)` +
+        ` | ${inactive.toLocaleString("pt-BR")} inativo(s)` +
+        (unauthorized.size
+          ? ` | ${unauthorized.size.toLocaleString("pt-BR")} remissiva(s) mapeada(s)`
+          : "") +
+        ` | atualizado em ${dateText} | ${suffix}` +
+        reconstructionInfo +
+        pageInfo
       );
     }
 
@@ -1629,6 +1715,8 @@
               existing?.cycleKey || getRefreshCycleKey(new Date()),
             updatedAt:
               existing?.updatedAt || new Date().toISOString(),
+            complete: existing?.complete !== false,
+            stats: existing?.stats || null,
             terms: state.terms
           });
         } catch (error) {
@@ -1638,12 +1726,11 @@
     }
 
     // ============================================================
-    // CLIENTE DA API
+    // CLIENTE DA API - XML PREFERENCIAL, JSON COMO FALLBACK
     // ============================================================
 
-    async function apiFetchJson(url) {
-      const elapsed =
-        Date.now() - lastApiRequestFinishedAt;
+    async function waitApiInterval() {
+      const elapsed = Date.now() - lastApiRequestFinishedAt;
 
       if (
         lastApiRequestFinishedAt &&
@@ -1651,6 +1738,10 @@
       ) {
         await sleep(API_MIN_INTERVAL_MS - elapsed);
       }
+    }
+
+    async function apiFetchStructured(url) {
+      await waitApiInterval();
 
       let response;
 
@@ -1658,7 +1749,7 @@
         response = await fetch(url, {
           method: "GET",
           headers: {
-            Accept: "application/json"
+            Accept: "application/xml, text/xml;q=0.9, application/json;q=0.8"
           },
           cache: "no-store"
         });
@@ -1666,6 +1757,12 @@
         throw new Error(
           `Falha de rede ao consultar a API: ${error.message}`
         );
+      }
+
+      let body = "";
+
+      try {
+        body = await response.text();
       } finally {
         lastApiRequestFinishedAt = Date.now();
       }
@@ -1676,255 +1773,943 @@
         );
       }
 
-      const contentType = response.headers.get("content-type") || "";
+      const contentType = (
+        response.headers.get("content-type") || ""
+      ).toLowerCase();
 
-      if (!contentType.toLowerCase().includes("json")) {
-        const text = await response.text();
+      const trimmed = body.trim();
+
+      if (
+        contentType.includes("json") ||
+        trimmed.startsWith("{") ||
+        trimmed.startsWith("[")
+      ) {
+        try {
+          return {
+            format: "json",
+            payload: JSON.parse(body),
+            rawText: body
+          };
+        } catch (error) {
+          throw new Error(
+            `A API informou JSON, mas a resposta não pôde ser interpretada: ${error.message}`
+          );
+        }
+      }
+
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(body, "application/xml");
+      const parseError = xml.querySelector("parsererror");
+
+      if (parseError) {
         throw new Error(
-          `Resposta inesperada da API (${contentType || "sem content-type"}): ` +
-          text.slice(0, 180)
+          "A API não retornou XML válido. Início da resposta: " +
+          trimmed.slice(0, 180)
         );
       }
 
-      return response.json();
+      return {
+        format: "xml",
+        payload: xml,
+        rawText: body
+      };
+    }
+
+    async function apiFetchStructuredWithRetry(url, retries = 2) {
+      let lastError = null;
+
+      for (let attempt = 0; attempt <= retries; attempt += 1) {
+        try {
+          return await apiFetchStructured(url);
+        } catch (error) {
+          lastError = error;
+
+          if (/HTTP\s+(400|404)\b/.test(String(error.message || ""))) {
+            break;
+          }
+
+          if (attempt < retries) {
+            await sleep(API_MIN_INTERVAL_MS);
+          }
+        }
+      }
+
+      throw lastError || new Error("Falha desconhecida ao consultar a API.");
     }
 
     function sleep(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    async function carregarTodosOsTermosDaApi() {
-      let pagina = 1;
-      const todos = [];
+    function structuredTerms(response) {
+      if (response.format === "xml") {
+        return extractTermRecordsFromXml(response.payload);
+      }
 
-      while (true) {
+      return extractTermRecordsFromJson(response.payload);
+    }
+
+    function extractFirstStructuredTerm(response) {
+      const terms = structuredTerms(response);
+
+      if (terms.length) {
+        return terms[0];
+      }
+
+      // Alguns endpoints de detalhe em JSON devolvem diretamente o objeto,
+      // sem o campo "autorizado". Nesse caso tentamos normalizá-lo diretamente.
+      if (
+        response.format === "json" &&
+        response.payload &&
+        typeof response.payload === "object" &&
+        !Array.isArray(response.payload)
+      ) {
+        const direct = findLikelyDetailObject(response.payload);
+        if (direct) return direct;
+      }
+
+      throw new Error("Nenhum registro de termo foi reconhecido na resposta.");
+    }
+
+    function findLikelyDetailObject(payload) {
+      const visited = new Set();
+
+      function walk(value, depth = 0) {
+        if (
+          value == null ||
+          typeof value !== "object" ||
+          depth > 6 ||
+          visited.has(value)
+        ) {
+          return null;
+        }
+
+        visited.add(value);
+
+        if (!Array.isArray(value)) {
+          const numero = getField(value, [
+            "numero", "numdoc", "numeroDocumento", "numeroDoc",
+            "codigo", "cod", "controle", "id", "idTermo", "identificador"
+          ]);
+          const termo = getField(value, [
+            "termo", "nome", "descricao", "descritor", "nomeTermo"
+          ]);
+
+          if (numero !== undefined && termo !== undefined) {
+            return value;
+          }
+        }
+
+        for (const child of Object.values(value)) {
+          const found = walk(child, depth + 1);
+          if (found) return found;
+        }
+
+        return null;
+      }
+
+      return walk(payload);
+    }
+
+    async function carregarTodosOsTermosDaApi() {
+      const byKey = new Map();
+      const seenPageSignatures = new Set();
+      let pagina = 1;
+      let pagesFetched = 0;
+      let formatUsed = null;
+      let stopReason = "";
+
+      while (pagina <= API_MAX_PAGES) {
         const url = new URL(API_LIST_URL);
         url.searchParams.set("p", String(pagina));
         url.searchParams.set("tp", String(API_PAGE_SIZE));
 
         setStatus(
-          `Atualizando dados pela API... pagina ${pagina} (${todos.length.toLocaleString("pt-BR")} registro(s) recebidos)`
+          `Atualizando dados pela API... página ${pagina}` +
+          ` | ${byKey.size.toLocaleString("pt-BR")} registro(s) único(s)`
         );
 
-        let payload;
+        let response;
 
         try {
-          payload = await apiFetchJson(url.toString());
+          response = await apiFetchStructured(url.toString());
         } catch (error) {
-          // Algumas APIs sinalizam o fim da paginacao com 400/404.
-          // Se ao menos uma pagina ja foi obtida, tratamos isso como fim.
           if (
             pagina > 1 &&
             /HTTP\s+(400|404)\b/.test(String(error.message || ""))
           ) {
+            stopReason = `HTTP de fim de paginação na página ${pagina}`;
             break;
           }
 
           throw error;
         }
 
-        const itensDaPagina = extractList(payload);
+        pagesFetched += 1;
+        formatUsed = formatUsed || response.format;
 
-        if (!itensDaPagina.length) {
+        const pageTerms = structuredTerms(response);
+
+        if (!pageTerms.length) {
+          stopReason = `página ${pagina} sem registros`;
           break;
         }
 
-        todos.push(...itensDaPagina);
+        const pageKeys = pageTerms.map(recordIdentity).filter(Boolean);
+        const signature = pageKeys.join("|");
 
-        // A ultima pagina vem com menos registros que o tamanho solicitado.
-        if (itensDaPagina.length < API_PAGE_SIZE) {
+        if (seenPageSignatures.has(signature)) {
+          stopReason = `a página ${pagina} repetiu uma página anterior`;
           break;
         }
 
+        seenPageSignatures.add(signature);
+
+        let newOnPage = 0;
+
+        for (const record of pageTerms) {
+          const key = recordIdentity(record);
+          if (!key) continue;
+
+          if (!byKey.has(key)) {
+            newOnPage += 1;
+          }
+
+          // Se o mesmo registro reaparecer, o último objeto prevalece.
+          byKey.set(key, record);
+        }
+
+        if (newOnPage === 0) {
+          stopReason = `página ${pagina} sem registros novos`;
+          break;
+        }
+
+        // IMPORTANTE: não encerramos por pageTerms.length < API_PAGE_SIZE.
+        // A API pode impor um limite próprio, inferior ao solicitado em tp.
         pagina += 1;
-        // O intervalo minimo entre chamadas e aplicado dentro de apiFetchJson().
       }
 
-      return todos;
+      if (pagina > API_MAX_PAGES) {
+        throw new Error(
+          `A paginação excedeu o limite de segurança de ${API_MAX_PAGES} páginas.`
+        );
+      }
+
+      const records = Array.from(byKey.values());
+
+      if (!records.length) {
+        throw new Error("A API respondeu, mas nenhum registro de termo foi reconhecido.");
+      }
+
+      console.info("Coleta do Thesaurus concluída", {
+        pagesFetched,
+        records: records.length,
+        formatUsed,
+        stopReason
+      });
+
+      return {
+        records,
+        stats: {
+          pagesFetched,
+          rawUniqueRecords: records.length,
+          formatUsed,
+          stopReason
+        }
+      };
     }
 
-    function extractList(payload) {
-      const visited = new Set();
+    function recordIdentity(raw) {
+      const numero = referenceNumber(
+        getField(raw, [
+          "numero", "numdoc", "numeroDocumento", "numeroDoc",
+          "codigo", "cod", "controle", "id", "idTermo", "identificador"
+        ])
+      );
+
+      if (numero) return `n:${numero}`;
+
+      const termo = referenceLabel(
+        getField(raw, [
+          "termo", "nome", "descricao", "descritor", "nomeTermo"
+        ])
+      );
+
+      return termo ? `t:${normalizeIcmgName(termo)}` : "";
+    }
+
+    // ---------------- XML ----------------
+
+    function xmlKey(node) {
+      return normalizeObjectKey(
+        node?.localName || node?.nodeName || ""
+      );
+    }
+
+    function xmlDirectElements(node) {
+      return Array.from(node?.children || []);
+    }
+
+    function xmlDirectChild(node, aliases) {
+      const wanted = new Set(aliases.map(normalizeObjectKey));
+      return xmlDirectElements(node).find(child =>
+        wanted.has(xmlKey(child))
+      ) || null;
+    }
+
+    function xmlFieldText(node, aliases) {
+      const child = xmlDirectChild(node, aliases);
+      return child ? String(child.textContent || "").trim() : "";
+    }
+
+    function xmlDescendantText(node, aliases) {
+      if (!node) return "";
+
+      const wanted = new Set(aliases.map(normalizeObjectKey));
+      const descendants = Array.from(
+        node.getElementsByTagName?.("*") || []
+      );
+
+      for (const child of descendants) {
+        if (wanted.has(xmlKey(child))) {
+          const value = String(child.textContent || "").trim();
+          if (value) return value;
+        }
+      }
+
+      return "";
+    }
+
+    function xmlBestText(node, aliases) {
+      return (
+        xmlFieldText(node, aliases) ||
+        xmlDescendantText(node, aliases)
+      );
+    }
+
+    function xmlReference(node) {
+      if (!node) return "";
+
+      const numero = xmlBestText(node, [
+        "numero", "numdoc", "numeroDocumento", "numeroDoc",
+        "codigo", "cod", "controle", "id", "idTermo", "identificador"
+      ]);
+      const termo = xmlBestText(node, [
+        "termo", "nome", "descricao", "descritor", "nomeTermo",
+        "label", "valor"
+      ]);
+
+      if (numero || termo) {
+        return {
+          numero: numero || null,
+          termo: termo || ""
+        };
+      }
+
+      const children = xmlDirectElements(node);
+
+      if (children.length === 1) {
+        return xmlReference(children[0]);
+      }
+
+      return String(node.textContent || "").trim();
+    }
+
+    function splitReferenceText(text) {
+      const value = String(text || "").trim();
+      if (!value) return [];
+
+      // A saída tabular do Thesaurus utiliza lista separada por vírgula.
+      // Preferimos ponto e vírgula quando houver; caso contrário, vírgula
+      // seguida de espaço. Elementos XML estruturados não passam por aqui.
+      const separator = value.includes(";") ? /\s*;\s*/ : /,\s+/;
+      return value.split(separator).map(item => item.trim()).filter(Boolean);
+    }
+
+    function xmlReferenceArray(field) {
+      if (!field) return [];
+
+      const children = xmlDirectElements(field);
+
+      if (!children.length) {
+        return splitReferenceText(field.textContent);
+      }
+
+      const refs = [];
+
+      function visit(node) {
+        const direct = xmlDirectElements(node);
+        const hasIdentity = Boolean(
+          xmlDirectChild(node, [
+            "numero", "numdoc", "numeroDocumento", "numeroDoc",
+            "codigo", "cod", "controle", "id", "idTermo", "identificador",
+            "termo", "nome", "descricao", "descritor", "nomeTermo",
+            "label", "valor"
+          ])
+        );
+
+        if (hasIdentity) {
+          const ref = xmlReference(node);
+          if (referenceLabel(ref) || referenceNumber(ref)) refs.push(ref);
+          return;
+        }
+
+        if (!direct.length) {
+          refs.push(...splitReferenceText(node.textContent));
+          return;
+        }
+
+        direct.forEach(visit);
+      }
+
+      children.forEach(visit);
+      return refs;
+    }
+
+    function xmlHierarchyPaths(node) {
+      const paths = [];
+      const candidates = Array.from(node?.getElementsByTagName?.("*") || []);
+
+      for (const candidate of candidates) {
+        const key = xmlKey(candidate);
+
+        if (
+          key === "hierarquia" ||
+          key === "caminho" ||
+          key === "path" ||
+          key === "ocorrenciahierarquia" ||
+          key === "ocorrenciashierarquias" ||
+          key === "hierarchypath" ||
+          key === "hierarchypaths"
+        ) {
+          const text = String(candidate.textContent || "").trim();
+
+          if (
+            text &&
+            text.length < 4000 &&
+            (
+              text.includes("/") ||
+              text.includes(" > ") ||
+              text.includes("→") ||
+              text.includes("|")
+            )
+          ) {
+            paths.push(text);
+          }
+        }
+      }
+
+      return Array.from(new Set(paths));
+    }
+
+    function xmlRecordToObject(node) {
+      const termoGeralNode = xmlDirectChild(node, [
+        "termoGeral", "termosGerais", "termoGenerico", "termoPai",
+        "termoSuperior", "pai", "ascendente", "broaderTerm", "tg"
+      ]);
+
+      const parentId = xmlBestText(node, [
+        "termoPaiId", "idTermoPai", "termoGeralId", "idTermoGeral",
+        "idPai", "paiId", "idAscendente", "ascendenteId"
+      ]);
+
+      let termoGeral = termoGeralNode
+        ? xmlReference(termoGeralNode)
+        : "";
+
+      if (parentId) {
+        const label = referenceLabel(termoGeral);
+        termoGeral = {
+          id: parentId,
+          numero: referenceNumber(termoGeral),
+          termo: label
+        };
+      }
+
+      const especificosNode = xmlDirectChild(node, [
+        "termosEspecificos", "termoEspecifico", "termosFilhos",
+        "filhos", "descendentes", "narrowerTerms", "te"
+      ]);
+
+      const relacionadosNode = xmlDirectChild(node, [
+        "termosRelacionados", "termoRelacionado", "relacionados",
+        "relatedTerms", "tr"
+      ]);
+
+      const naoAutorizadosNode = xmlDirectChild(node, [
+        "termosNaoAutorizados", "termoNaoAutorizado", "naoAutorizados",
+        "naoAutorizado", "usadoPor", "usadosPor", "useFor",
+        "sinonimos", "up"
+      ]);
+
+      const useNode = xmlDirectChild(node, [
+        "use", "usar", "termoPreferido", "descritorAutorizado",
+        "termoAutorizadoReferencia"
+      ]);
+
+      return {
+        numero: xmlBestText(node, [
+          "numero", "numdoc", "numeroDocumento", "numeroDoc",
+          "codigo", "cod", "controle", "id", "idTermo", "identificador"
+        ]),
+        termo: xmlBestText(node, [
+          "termo", "nome", "descricao", "descritor", "nomeTermo"
+        ]),
+        autorizado: xmlBestText(node, [
+          "autorizado", "termoAutorizado", "ehAutorizado"
+        ]),
+        ativo: xmlBestText(node, [
+          "ativo", "situacao", "status"
+        ]),
+        termoAnterior: xmlBestText(node, [
+          "termoAnterior", "nomeAnterior"
+        ]),
+        conceito: xmlBestText(node, ["conceito", "tq"]),
+        definicao: xmlBestText(node, ["definicao", "df"]),
+        notaExplicativa: xmlBestText(node, [
+          "notaExplicativa", "notaEscopo", "notaDeEscopo", "ne"
+        ]),
+        notaHistorica: xmlBestText(node, [
+          "notaHistorica", "notaUso", "notaDeUso", "nh"
+        ]),
+        classe: xmlBestText(node, ["classe", "categoria"]),
+        termoGeral,
+        termoGeralId: parentId || "",
+        termosEspecificos: xmlReferenceArray(especificosNode),
+        termosRelacionados: xmlReferenceArray(relacionadosNode),
+        termosNaoAutorizados: xmlReferenceArray(naoAutorizadosNode),
+        use: useNode ? xmlReference(useNode) : "",
+        hierarquia: xmlHierarchyPaths(node)
+      };
+    }
+
+    function extractTermRecordsFromXml(xml) {
+      const all = Array.from(xml.getElementsByTagName("*"));
+      const records = [];
+      const seen = new Set();
+
+      // A estrutura XML da API nem sempre deixa Numero e Termo como filhos
+      // diretos do mesmo elemento. O marcador confiavel do registro, usado
+      // inclusive no importador anterior da ALMG, e o filho direto
+      // <autorizado>. Depois de identificar esse elemento, procuramos Numero
+      // e Termo tanto diretamente quanto nos descendentes.
+      for (const node of all) {
+        const directAuthorized = xmlFieldText(node, [
+          "autorizado", "termoAutorizado", "ehAutorizado"
+        ]);
+
+        if (directAuthorized === "") {
+          continue;
+        }
+
+        const raw = xmlRecordToObject(node);
+
+        if (!String(raw.termo || "").trim()) {
+          continue;
+        }
+
+        const key = recordIdentity(raw);
+
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          records.push(raw);
+        }
+      }
+
+      return records;
+    }
+
+    // ---------------- JSON ----------------
+
+    function extractTermRecordsFromJson(payload) {
+      const records = [];
+      const seenObjects = new Set();
+      const seenRecords = new Set();
 
       function walk(value, depth = 0) {
-        if (depth > 5 || value == null) {
-          return null;
+        if (
+          value == null ||
+          typeof value !== "object" ||
+          depth > 8 ||
+          seenObjects.has(value)
+        ) {
+          return;
         }
 
-        if (Array.isArray(value)) {
-          return value;
-        }
+        seenObjects.add(value);
 
-        if (typeof value !== "object") {
-          return null;
-        }
+        if (!Array.isArray(value)) {
+          const numero = getField(value, [
+            "numero", "numdoc", "numeroDocumento", "numeroDoc",
+            "codigo", "cod", "controle", "id", "idTermo", "identificador"
+          ]);
+          const termo = getField(value, [
+            "termo", "nome", "descricao", "descritor", "nomeTermo"
+          ]);
+          const autorizado = getField(value, [
+            "autorizado", "termoAutorizado", "ehAutorizado"
+          ]);
 
-        if (visited.has(value)) {
-          return null;
-        }
-
-        visited.add(value);
-
-        const preferredKeys = [
-          "termos",
-          "lista",
-          "itens",
-          "items",
-          "resultados",
-          "results",
-          "content",
-          "dados",
-          "data"
-        ];
-
-        for (const key of preferredKeys) {
-          if (key in value) {
-            const found = walk(value[key], depth + 1);
-            if (found) {
-              return found;
+          if (
+            numero !== undefined &&
+            termo !== undefined &&
+            autorizado !== undefined
+          ) {
+            const key = recordIdentity(value);
+            if (key && !seenRecords.has(key)) {
+              seenRecords.add(key);
+              records.push(value);
             }
           }
         }
 
         for (const child of Object.values(value)) {
-          const found = walk(child, depth + 1);
-          if (found) {
-            return found;
-          }
+          walk(child, depth + 1);
         }
-
-        return null;
       }
 
-      const result = walk(payload);
-
-      if (!Array.isArray(result)) {
-        throw new Error(
-          "Nao foi localizada uma lista de termos no JSON retornado pela API."
-        );
-      }
-
-      return result;
-    }
-
-    function extractDetail(payload) {
-      if (
-        payload &&
-        typeof payload === "object" &&
-        !Array.isArray(payload)
-      ) {
-        const preferredKeys = [
-          "termo",
-          "item",
-          "resultado",
-          "dados",
-          "data"
-        ];
-
-        for (const key of preferredKeys) {
-          const value = payload[key];
-
-          if (
-            value &&
-            typeof value === "object" &&
-            !Array.isArray(value)
-          ) {
-            return value;
-          }
-        }
-
-        return payload;
-      }
-
-      if (Array.isArray(payload) && payload.length) {
-        return payload[0];
-      }
-
-      throw new Error("Detalhe de termo vazio ou em formato inesperado.");
+      walk(payload);
+      return records;
     }
 
     // ============================================================
     // ADAPTADOR API -> MODELO INTERNO DA PAGINA
     // ============================================================
 
+    function splitHierarchyPath(value) {
+      const text = String(value || "").trim();
+      if (!text) return [];
+
+      let parts;
+
+      if (text.includes("→")) {
+        parts = text.split(/\s*→\s*/);
+      } else if (text.includes(" > ")) {
+        parts = text.split(/\s*>\s*/);
+      } else if (text.includes("|")) {
+        parts = text.split(/\s*\|\s*/);
+      } else {
+        parts = text.split(/\s*\/\s*/);
+      }
+
+      return parts
+        .map(part => String(part || "").trim())
+        .filter(Boolean)
+        .map(part =>
+          normalizeIcmgName(part) === "tesauro"
+            ? "Thesaurus"
+            : part
+        );
+    }
+
+    function criarNoHierarquicoPlaceholder(name, hintedNumber = null) {
+      const termo = String(name || "").trim();
+      const number = referenceNumber(hintedNumber);
+
+      return {
+        id: number
+          ? `icmg-${number}`
+          : `hier-${slugIcmg(termo)}`,
+        numdoc: number || null,
+        parentId: null,
+        termo,
+        termoAnterior: "",
+        conceito: "",
+        definicao: "",
+        notaEscopo: "",
+        notaUso: "",
+        relacionados: [],
+        relacionadosNaoAutorizados: [],
+        ativo: null,
+        _detailsLoaded: false,
+        _detailLoading: false,
+        _syntheticClass: false,
+        _hierarchyOnly: true,
+        _hierarchyPaths: []
+      };
+    }
+
     function adaptarListaDaApi(rawTerms) {
       const provisional = rawTerms
         .map(raw => normalizarRegistroApi(raw, false))
         .filter(Boolean);
 
-      const authorized = provisional.filter(term =>
-        term._authorized !== false &&
-        !isTermoIcmgDescartado(term.termo)
+      // /lista nao deve ser interpretado como a arvore completa. Na resposta
+      // atual, ele devolve os termos diretamente listados e, nos proprios
+      // registros, caminhos de hierarquia que podem conter ancestrais que nao
+      // aparecem como registros independentes. Reconstruimos esses ancestrais
+      // antes de validar o snapshot.
+      const authorizedSeeds = provisional.filter(term =>
+        term._authorized === true
       );
 
       const nonAuthorized = provisional.filter(term =>
         term._authorized === false
       );
 
-      const byId = new Map();
+      const seedByName = new Map();
+      const duplicateNames = new Set();
+      const knownIdByName = new Map();
+      const idConflicts = new Set();
+      const pathLabelByName = new Map();
+      const parentNameByChildName = new Map();
+      const parentPathConflicts = new Set();
+      const pathNames = new Set();
+      let hierarchyPathCount = 0;
+
+      function canonicalLabel(value) {
+        let label = referenceLabel(value);
+
+        if (
+          !label &&
+          (typeof value === "string" || typeof value === "number")
+        ) {
+          label = String(value || "").trim();
+        }
+
+        if (!label) return "";
+
+        return normalizeIcmgName(label) === "tesauro"
+          ? "Thesaurus"
+          : label;
+      }
+
+      function registerKnownId(labelValue, refValue) {
+        const label = canonicalLabel(labelValue);
+        const number = referenceNumber(refValue);
+        const key = normalizeIcmgName(label);
+
+        if (!key || !number) return;
+
+        const current = knownIdByName.get(key);
+        if (current && current !== number) {
+          idConflicts.add(label);
+          return;
+        }
+
+        knownIdByName.set(key, number);
+      }
+
+      function registerReference(ref) {
+        if (ref == null || ref === "") return;
+
+        if (Array.isArray(ref)) {
+          ref.forEach(registerReference);
+          return;
+        }
+
+        // Uma referencia textual numerica pode ser o proprio nome do termo
+        // (por exemplo "2011"), e nao seu identificador. So inferimos
+        // nome -> id quando a API forneceu uma referencia estruturada.
+        if (typeof ref !== "object") return;
+
+        const label = canonicalLabel(ref);
+        if (label) registerKnownId(label, ref);
+      }
+
+      for (const seed of authorizedSeeds) {
+        const key = normalizeIcmgName(seed.termo);
+
+        if (seedByName.has(key)) {
+          duplicateNames.add(seed.termo);
+        } else {
+          seedByName.set(key, seed);
+        }
+
+        registerKnownId(seed.termo, seed.numdoc);
+        registerReference(seed._parentReference);
+        registerReference(seed._specificReferences);
+        registerReference(seed._relatedReferences);
+
+        for (const path of seed._hierarchyPaths || []) {
+          const parts = splitHierarchyPath(path);
+          if (!parts.length) continue;
+
+          hierarchyPathCount += 1;
+
+          for (const part of parts) {
+            const keyPart = normalizeIcmgName(part);
+            if (!keyPart) continue;
+            pathNames.add(keyPart);
+            if (!pathLabelByName.has(keyPart)) {
+              pathLabelByName.set(keyPart, part);
+            }
+          }
+
+          for (let i = 1; i < parts.length; i += 1) {
+            const parentLabel = parts[i - 1];
+            const childLabel = parts[i];
+            const childKey = normalizeIcmgName(childLabel);
+            const parentKeyName = normalizeIcmgName(parentLabel);
+
+            if (!childKey || !parentKeyName || childKey === parentKeyName) {
+              continue;
+            }
+
+            const existing = parentNameByChildName.get(childKey);
+
+            if (
+              existing &&
+              normalizeIcmgName(existing) !== parentKeyName
+            ) {
+              parentPathConflicts.add(childLabel);
+            } else if (!existing) {
+              parentNameByChildName.set(childKey, parentLabel);
+            }
+          }
+        }
+      }
+
+      // Quando a referencia TG traz apenas o identificador, o caminho da
+      // hierarquia fornece o nome do pai. Cruzamos as duas informacoes para
+      // preservar o id real do ancestral e permitir /{numdoc} sob demanda.
+      for (const seed of authorizedSeeds) {
+        const seedKey = normalizeIcmgName(seed.termo);
+        const parentFromPath = parentNameByChildName.get(seedKey);
+        const parentRefNumber = referenceNumber(seed._parentReference);
+        const parentRefLabel = canonicalLabel(seed._parentReference);
+
+        if (parentFromPath && parentRefNumber) {
+          registerKnownId(parentFromPath, parentRefNumber);
+        }
+
+        if (parentRefLabel && parentRefNumber) {
+          registerKnownId(parentRefLabel, parentRefNumber);
+        }
+      }
+
+      const allNames = new Map();
+
+      function registerNodeName(value) {
+        const label = canonicalLabel(value);
+        const key = normalizeIcmgName(label);
+        if (!key) return;
+
+        if (!allNames.has(key)) {
+          allNames.set(key, label);
+        }
+      }
+
+      for (const seed of authorizedSeeds) {
+        registerNodeName(seed.termo);
+
+        const parentLabel = canonicalLabel(seed._parentReference);
+        if (parentLabel) registerNodeName(parentLabel);
+      }
+
+      for (const [key, label] of pathLabelByName) {
+        if (!allNames.has(key)) allNames.set(key, label);
+      }
+
+      // Se os caminhos comecarem diretamente nos quatro ramos principais,
+      // o endpoint pode nao repetir o no estrutural "Thesaurus". Criamos
+      // apenas esse no-raiz conhecido, sem inventar outros ancestrais.
+      const topBranchKeys = EXPECTED_TOP_BRANCHES.map(normalizeIcmgName);
+      const hasAllTopBranches = topBranchKeys.every(key => allNames.has(key));
+      const thesaurusKey = normalizeIcmgName("Thesaurus");
+
+      if (!allNames.has(thesaurusKey) && hasAllTopBranches) {
+        allNames.set(thesaurusKey, "Thesaurus");
+      }
+
+      const terms = [];
       const byName = new Map();
+      const byId = new Map();
+      let recoveredHierarchyNodes = 0;
+      let recoveredNodesWithReferencedId = 0;
 
-      for (const term of authorized) {
+      for (const [nameKey, fallbackLabel] of allNames) {
+        const seed = seedByName.get(nameKey);
+        let term;
+
+        if (seed) {
+          term = seed;
+          term._hierarchyOnly = false;
+        } else {
+          const hintedNumber = knownIdByName.get(nameKey) || null;
+          term = criarNoHierarquicoPlaceholder(
+            fallbackLabel,
+            hintedNumber
+          );
+          recoveredHierarchyNodes += 1;
+          if (hintedNumber) recoveredNodesWithReferencedId += 1;
+        }
+
+        // Evita colisao de ids caso o servidor reutilize um identificador
+        // inesperadamente. O nome autorizado e unico no snapshot de referencia.
+        if (byId.has(String(term.id))) {
+          term.id = `hier-${slugIcmg(term.termo)}-${terms.length + 1}`;
+          if (term._hierarchyOnly) term.numdoc = null;
+        }
+
+        terms.push(term);
+        byName.set(nameKey, term);
         byId.set(String(term.id), term);
-        byName.set(normalizeIcmgName(term.termo), term);
       }
 
-      // Se a API trouxer termos nao autorizados como registros separados,
-      // associa-os ao descritor autorizado quando houver referencia USE.
-      for (const up of nonAuthorized) {
-        const target = resolveReferenceToTerm(
-          up._useReference,
-          byId,
-          byName
+      function resolveAgainstAll(ref) {
+        if (ref == null || ref === "") return null;
+
+        const label = canonicalLabel(ref);
+        if (label) {
+          const foundByName = byName.get(normalizeIcmgName(label));
+          if (foundByName) return foundByName;
+        }
+
+        const number = referenceNumber(ref);
+        if (number) {
+          return byId.get(`icmg-${number}`) || null;
+        }
+
+        return null;
+      }
+
+      // 1) Caminhos da API definem a estrutura dos nos recuperados.
+      for (const term of terms) {
+        const parentLabel = parentNameByChildName.get(
+          normalizeIcmgName(term.termo)
         );
 
-        if (target) {
-          if (!target.relacionadosNaoAutorizados.includes(up.termo)) {
-            target.relacionadosNaoAutorizados.push(up.termo);
+        if (!parentLabel) continue;
+
+        const parent = byName.get(normalizeIcmgName(parentLabel));
+        if (parent && parent.id !== term.id) {
+          term.parentId = parent.id;
+        }
+      }
+
+      // 2) TG explicito do registro tem prioridade sobre o caminho.
+      for (const seed of authorizedSeeds) {
+        const target = byName.get(normalizeIcmgName(seed.termo));
+        if (!target) continue;
+
+        const parent = resolveAgainstAll(seed._parentReference);
+
+        if (parent && parent.id !== target.id) {
+          target.parentId = parent.id;
+        } else {
+          const parentFromPath = parentNameByChildName.get(
+            normalizeIcmgName(target.termo)
+          );
+
+          if (parentFromPath) {
+            const pathParent = byName.get(
+              normalizeIcmgName(parentFromPath)
+            );
+            if (pathParent && pathParent.id !== target.id) {
+              target.parentId = pathParent.id;
+            }
           }
         }
       }
 
-      // Resolve TG e TR por numero ou pelo nome do termo.
-      for (const term of authorized) {
-        const parent = resolveReferenceToTerm(
-          term._parentReference,
-          byId,
-          byName
-        );
+      // 3) TE e uma confirmacao/fallback. Nunca substitui TG ou caminho.
+      for (const seedParent of authorizedSeeds) {
+        const parent = byName.get(normalizeIcmgName(seedParent.termo));
+        if (!parent) continue;
 
-        term.parentId = parent ? parent.id : null;
-
-        const relatedIds = [];
-
-        for (const ref of term._relatedReferences) {
-          const related = resolveReferenceToTerm(
-            ref,
-            byId,
-            byName
-          );
-
-          if (
-            related &&
-            related.id !== term.id &&
-            !relatedIds.includes(related.id)
-          ) {
-            relatedIds.push(related.id);
-          }
-        }
-
-        term.relacionados = relatedIds;
-      }
-
-      // Termos especificos tambem podem informar a hierarquia.
-      // Servem como segunda fonte se o TG nao vier preenchido na lista.
-      for (const parent of authorized) {
-        for (const childRef of parent._specificReferences) {
-          const child = resolveReferenceToTerm(
-            childRef,
-            byId,
-            byName
-          );
+        for (const childRef of seedParent._specificReferences || []) {
+          const child = resolveAgainstAll(childRef);
 
           if (
             child &&
@@ -1936,60 +2721,230 @@
         }
       }
 
-      // Se a API trouxer o campo Classe e ele nao corresponder a um TG,
-      // cria os mesmos nos estruturais que a versao TXT usava.
-      const classes = Array.from(
-        new Set(
-          authorized
-            .filter(term => !term.parentId)
-            .map(term => term._classe)
-            .filter(classe =>
-              classe &&
-              !isClasseIcmgSemRaiz(classe) &&
-              !isClasseIcmgDescartada(classe)
-            )
-        )
-      ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+      // 4) Completa apenas a ligacao conhecida dos quatro ramos principais
+      // quando a API omitiu o registro-raiz dos resultados de /lista.
+      const root = byName.get(thesaurusKey);
 
-      const classTerms = classes.map(classe => ({
-        id: `classe-${slugIcmg(classe)}`,
-        numdoc: null,
-        parentId: null,
-        termo: classe,
-        termoAnterior: "",
-        conceito: "",
-        definicao: "Classe geral informada pela API do Thesaurus.",
-        notaEscopo: "",
-        notaUso: "",
-        relacionados: [],
-        relacionadosNaoAutorizados: [],
-        _detailsLoaded: true,
-        _syntheticClass: true
-      }));
+      if (root) {
+        root.parentId = null;
 
-      const classIdByName = new Map(
-        classTerms.map(term => [
-          normalizeIcmgName(term.termo),
-          term.id
-        ])
-      );
-
-      for (const term of authorized) {
-        if (
-          !term.parentId &&
-          term._classe &&
-          !isClasseIcmgSemRaiz(term._classe)
-        ) {
-          term.parentId =
-            classIdByName.get(
-              normalizeIcmgName(term._classe)
-            ) || null;
+        for (const branchName of EXPECTED_TOP_BRANCHES) {
+          const branch = byName.get(normalizeIcmgName(branchName));
+          if (branch && !branch.parentId) {
+            branch.parentId = root.id;
+          }
         }
-
-        cleanupInternalApiFields(term);
       }
 
-      return classTerms.concat(authorized);
+      // Relacoes associativas dos registros diretamente devolvidos pela API.
+      for (const seed of authorizedSeeds) {
+        const target = byName.get(normalizeIcmgName(seed.termo));
+        if (!target) continue;
+
+        const relatedIds = [];
+
+        for (const ref of seed._relatedReferences || []) {
+          const related = resolveAgainstAll(ref);
+
+          if (
+            related &&
+            related.id !== target.id &&
+            !relatedIds.includes(related.id)
+          ) {
+            relatedIds.push(related.id);
+          }
+        }
+
+        target.relacionados = relatedIds;
+      }
+
+      // UP ja embutidos nos registros autorizados sao preservados; registros
+      // nao autorizados independentes tambem podem apontar via USE.
+      for (const up of nonAuthorized) {
+        const target = resolveAgainstAll(up._useReference);
+
+        if (
+          target &&
+          up.termo &&
+          !target.relacionadosNaoAutorizados.includes(up.termo)
+        ) {
+          target.relacionadosNaoAutorizados.push(up.termo);
+        }
+      }
+
+      for (const term of terms) {
+        if (seedByName.has(normalizeIcmgName(term.termo))) {
+          cleanupInternalApiFields(term);
+        }
+      }
+
+      return {
+        terms,
+        stats: {
+          directAuthorizedRecords: authorizedSeeds.length,
+          nonAuthorizedRecords: nonAuthorized.length,
+          hierarchyPathCount,
+          hierarchyNamesFound: pathNames.size,
+          recoveredHierarchyNodes,
+          recoveredNodesWithReferencedId,
+          hierarchyIdConflicts: idConflicts.size,
+          hierarchyParentConflicts: parentPathConflicts.size,
+          duplicateAuthorizedNames: duplicateNames.size
+        }
+      };
+    }
+
+    function validarEstruturaThesaurus(terms, previousTerms = []) {
+      const errors = [];
+      const warnings = [];
+      const byId = new Map();
+      const byName = new Map();
+      const duplicateIds = [];
+      const duplicateNames = [];
+
+      for (const term of terms) {
+        const id = String(term.id);
+        const name = normalizeIcmgName(term.termo);
+
+        if (byId.has(id)) duplicateIds.push(id);
+        else byId.set(id, term);
+
+        if (byName.has(name)) duplicateNames.push(term.termo);
+        else byName.set(name, term);
+      }
+
+      const descriptors = terms.length;
+      const activeDescriptors = terms.filter(term => term.ativo === true).length;
+      const inactiveDescriptors = terms.filter(term => term.ativo === false).length;
+
+      let previousDescriptorCount = 0;
+      if (Array.isArray(previousTerms) && previousTerms.length) {
+        previousDescriptorCount = previousTerms.length;
+      }
+
+      const minimumByPrevious = previousDescriptorCount
+        ? Math.floor(previousDescriptorCount * 0.9)
+        : 0;
+
+      const minimumAccepted = Math.max(
+        MIN_EXPECTED_AUTHORIZED_TERMS,
+        minimumByPrevious
+      );
+
+      if (descriptors < minimumAccepted) {
+        errors.push(
+          `foram reconhecidos ${descriptors.toLocaleString("pt-BR")} descritores; ` +
+          `o mínimo de segurança atual é ${minimumAccepted.toLocaleString("pt-BR")}`
+        );
+      }
+
+      if (duplicateIds.length) {
+        errors.push(`${duplicateIds.length} identificador(es) duplicado(s)`);
+      }
+
+      if (duplicateNames.length || terms._duplicateNames?.length) {
+        const count = Math.max(
+          duplicateNames.length,
+          terms._duplicateNames?.length || 0
+        );
+        errors.push(`${count} nome(s) de descritor duplicado(s)`);
+      }
+
+      const root = byName.get(normalizeIcmgName("Thesaurus"));
+
+      if (!root) {
+        errors.push('o descritor-raiz "Thesaurus" não foi localizado');
+      } else if (root.parentId) {
+        errors.push('o descritor-raiz "Thesaurus" apareceu com TermoGeral');
+      }
+
+      const roots = terms.filter(term => !term.parentId);
+
+      if (roots.length !== 1 || roots[0]?.id !== root?.id) {
+        errors.push(
+          `foram encontrados ${roots.length.toLocaleString("pt-BR")} nó(s) raiz; ` +
+          'o esperado é apenas "Thesaurus"'
+        );
+      }
+
+      if (root) {
+        for (const branchName of EXPECTED_TOP_BRANCHES) {
+          const branch = byName.get(normalizeIcmgName(branchName));
+
+          if (!branch) {
+            errors.push(`o ramo principal "${branchName}" não foi localizado`);
+          } else if (branch.parentId !== root.id) {
+            errors.push(`o ramo principal "${branchName}" não está subordinado a "Thesaurus"`);
+          }
+        }
+      }
+
+      const orphans = terms.filter(term =>
+        term.id !== root?.id &&
+        (!term.parentId || !byId.has(String(term.parentId)))
+      );
+
+      if (orphans.length) {
+        const sample = orphans.slice(0, 5).map(term => term.termo).join(", ");
+        errors.push(
+          `${orphans.length.toLocaleString("pt-BR")} descritor(es) ficaram órfãos` +
+          (sample ? ` (ex.: ${sample})` : "")
+        );
+      }
+
+      // Detecta ciclos no encadeamento TG.
+      let cycleCount = 0;
+
+      for (const term of terms) {
+        const path = new Set();
+        let current = term;
+
+        while (current) {
+          if (path.has(current.id)) {
+            cycleCount += 1;
+            break;
+          }
+
+          path.add(current.id);
+          current = current.parentId
+            ? byId.get(String(current.parentId)) || null
+            : null;
+        }
+      }
+
+      if (cycleCount) {
+        errors.push(`${cycleCount.toLocaleString("pt-BR")} ciclo(s) hierárquico(s) detectado(s)`);
+      }
+
+      const mappedRemissives = new Set();
+      for (const term of terms) {
+        for (const up of term.relacionadosNaoAutorizados || []) {
+          const key = normalizeIcmgName(up);
+          if (key) mappedRemissives.add(key);
+        }
+      }
+
+      if (!mappedRemissives.size) {
+        warnings.push(
+          "nenhuma remissiva UP foi mapeada na lista; elas poderão ser obtidas nos detalhes por numdoc"
+        );
+      }
+
+      if (warnings.length) {
+        console.warn("Avisos de validação do Thesaurus:", warnings);
+      }
+
+      return {
+        ok: errors.length === 0,
+        errors,
+        warnings,
+        descriptors,
+        activeDescriptors,
+        inactiveDescriptors,
+        mappedRemissives: mappedRemissives.size,
+        roots: roots.map(term => term.termo),
+        orphanCount: orphans.length
+      };
     }
 
     function normalizarRegistroApi(raw, fromDetail) {
@@ -2003,14 +2958,19 @@
         "numeroDocumento",
         "numeroDoc",
         "codigo",
-        "id"
+        "cod",
+        "controle",
+        "id",
+        "idTermo",
+        "identificador"
       ]);
 
       const termoValue = getField(raw, [
         "termo",
         "nome",
         "descricao",
-        "descritor"
+        "descritor",
+        "nomeTermo"
       ]);
 
       const termo = referenceLabel(termoValue);
@@ -2035,37 +2995,71 @@
         "status"
       ]);
 
-      const parentReference = getField(raw, [
+      const parentReferenceValue = getFieldDeep(raw, [
         "termoGeral",
+        "termosGerais",
+        "termoGenerico",
+        "termosGenericos",
         "termoPai",
+        "termoSuperior",
         "pai",
+        "ascendente",
+        "broaderTerm",
+        "broaderTerms",
         "tg"
       ]);
 
+      const parentIdValue = getFieldDeep(raw, [
+        "termoPaiId",
+        "idTermoPai",
+        "termoGeralId",
+        "idTermoGeral",
+        "idPai",
+        "paiId",
+        "idAscendente",
+        "ascendenteId"
+      ]);
+
+      let parentReference = parentReferenceValue;
+
+      if (parentIdValue !== undefined && parentIdValue !== null && parentIdValue !== "") {
+        parentReference = {
+          numero: referenceNumber(parentIdValue) || String(parentIdValue).trim(),
+          termo: referenceLabel(parentReferenceValue)
+        };
+      }
+
       const specificReferences = normalizeReferenceArray(
-        getField(raw, [
+        getFieldDeep(raw, [
           "termosEspecificos",
           "termoEspecifico",
+          "termosFilhos",
           "filhos",
+          "descendentes",
+          "narrowerTerms",
           "te"
         ])
       );
 
       const relatedReferences = normalizeReferenceArray(
-        getField(raw, [
+        getFieldDeep(raw, [
           "termosRelacionados",
           "termoRelacionado",
           "relacionados",
+          "relatedTerms",
           "tr"
         ])
       );
 
       const unauthorizedValues = normalizeReferenceArray(
-        getField(raw, [
+        getFieldDeep(raw, [
           "termosNaoAutorizados",
+          "termoNaoAutorizado",
           "naoAutorizados",
+          "naoAutorizado",
           "usadoPor",
           "usadosPor",
+          "useFor",
           "sinonimos",
           "up"
         ])
@@ -2073,13 +3067,15 @@
         .map(referenceLabel)
         .filter(Boolean);
 
-      const useReference = getField(raw, [
+      const useReference = getFieldDeep(raw, [
         "use",
         "usar",
         "termoPreferido",
         "descritorAutorizado",
         "termoAutorizadoReferencia"
       ]);
+
+      const hierarchyPaths = extractHierarchyPaths(raw);
 
       const detailsLoaded = Boolean(fromDetail) || hasAnyField(raw, [
         "definicao",
@@ -2133,6 +3129,7 @@
           new Set(unauthorizedValues)
         ),
         _authorized: parseYesNo(autorizadoValue, true),
+        ativo: parseActive(ativoValue),
         _active: parseActive(ativoValue),
         _classe: textValue(
           getField(raw, ["classe", "categoria"])
@@ -2141,6 +3138,7 @@
         _specificReferences: specificReferences,
         _relatedReferences: relatedReferences,
         _useReference: useReference,
+        _hierarchyPaths: hierarchyPaths,
         _detailsLoaded: detailsLoaded,
         _detailLoading: false,
         _syntheticClass: false
@@ -2155,6 +3153,154 @@
       delete term._specificReferences;
       delete term._relatedReferences;
       delete term._useReference;
+      // _hierarchyPaths e mantido temporariamente ate a montagem final da arvore.
+    }
+
+    function getFieldDeep(obj, aliases, maxDepth = 4) {
+      const direct = getField(obj, aliases);
+      if (direct !== undefined) return direct;
+
+      const wanted = new Set(aliases.map(normalizeObjectKey));
+      const visited = new Set();
+
+      function walk(value, depth) {
+        if (
+          value == null ||
+          typeof value !== "object" ||
+          depth > maxDepth ||
+          visited.has(value)
+        ) {
+          return undefined;
+        }
+
+        visited.add(value);
+
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            const found = walk(item, depth + 1);
+            if (found !== undefined) return found;
+          }
+          return undefined;
+        }
+
+        for (const [key, child] of Object.entries(value)) {
+          if (wanted.has(normalizeObjectKey(key))) {
+            return child;
+          }
+        }
+
+        for (const child of Object.values(value)) {
+          const found = walk(child, depth + 1);
+          if (found !== undefined) return found;
+        }
+
+        return undefined;
+      }
+
+      return walk(obj, 0);
+    }
+
+    function extractHierarchyPaths(raw) {
+      const results = [];
+      const visited = new Set();
+
+      function isHierarchyKey(key) {
+        const normalized = normalizeObjectKey(key);
+        return (
+          normalized.includes("hierarquia") ||
+          normalized.includes("caminho") ||
+          normalized === "path" ||
+          normalized === "paths"
+        );
+      }
+
+      function addPath(value) {
+        const text = String(value || "").trim();
+        if (!text) return;
+
+        if (
+          text.includes("/") ||
+          text.includes(" > ") ||
+          text.includes("→") ||
+          text.includes("|")
+        ) {
+          results.push(text);
+        }
+      }
+
+      function labelsFromArray(items) {
+        const strings = items
+          .filter(item => typeof item === "string")
+          .map(item => String(item || "").trim())
+          .filter(Boolean);
+
+        const completePaths = strings.filter(item =>
+          item.includes("/") ||
+          item.includes(" > ") ||
+          item.includes("→") ||
+          item.includes("|")
+        );
+
+        if (completePaths.length) {
+          completePaths.forEach(addPath);
+          return true;
+        }
+
+        const labels = items
+          .map(item => referenceLabel(item))
+          .map(item => String(item || "").trim())
+          .filter(Boolean);
+
+        if (labels.length > 1) {
+          results.push(labels.join(" / "));
+          return true;
+        }
+
+        return false;
+      }
+
+      function walk(value, key = "", depth = 0) {
+        if (
+          value == null ||
+          depth > 5 ||
+          (typeof value === "object" && visited.has(value))
+        ) {
+          return;
+        }
+
+        if (typeof value === "string") {
+          if (isHierarchyKey(key)) addPath(value);
+          return;
+        }
+
+        if (typeof value !== "object") return;
+        visited.add(value);
+
+        if (Array.isArray(value)) {
+          if (isHierarchyKey(key) && labelsFromArray(value)) return;
+          value.forEach(item => walk(item, key, depth + 1));
+          return;
+        }
+
+        for (const [childKey, child] of Object.entries(value)) {
+          if (isHierarchyKey(childKey)) {
+            if (typeof child === "string") {
+              addPath(child);
+            } else if (Array.isArray(child)) {
+              if (!labelsFromArray(child)) {
+                child.forEach(item => walk(item, childKey, depth + 1));
+              }
+            } else {
+              walk(child, childKey, depth + 1);
+            }
+          } else {
+            walk(child, childKey, depth + 1);
+          }
+        }
+      }
+
+      walk(raw);
+      return Array.from(new Set(results));
     }
 
     function getField(obj, aliases) {
@@ -2283,8 +3429,14 @@
           "numero",
           "numdoc",
           "numeroDocumento",
+          "numeroDoc",
           "codigo",
-          "id"
+          "cod",
+          "controle",
+          "id",
+          "idTermo",
+          "identificador",
+          "termoId"
         ]);
 
         if (nested !== undefined && nested !== value) {
@@ -2313,6 +3465,8 @@
           "nome",
           "descricao",
           "descritor",
+          "nomeTermo",
+          "descricaoTermo",
           "valor",
           "label"
         ]);
@@ -2370,6 +3524,14 @@
         return null;
       }
 
+      if (Array.isArray(ref)) {
+        for (const item of ref) {
+          const resolved = resolveReferenceToTerm(item, byId, byName);
+          if (resolved) return resolved;
+        }
+        return null;
+      }
+
       const number = referenceNumber(ref);
 
       if (number != null) {
@@ -2395,7 +3557,6 @@
     async function carregarDetalhesSeNecessario(term) {
       if (
         !term ||
-        term._syntheticClass ||
         term._detailsLoaded ||
         term._detailLoading ||
         !term.numdoc
@@ -2407,16 +3568,17 @@
 
       if (state.selectedId === term.id) {
         setStatus(
-          `${state.terms.length.toLocaleString("pt-BR")} termo(s) | carregando detalhes...`
+          `${state.terms.length.toLocaleString("pt-BR")} descritor(es) | carregando detalhes...`
         );
       }
 
       try {
-        const payload = await apiFetchJson(
-          API_TERM_URL(term.numdoc)
+        const response = await apiFetchStructuredWithRetry(
+          API_TERM_URL(term.numdoc),
+          2
         );
 
-        const raw = extractDetail(payload);
+        const raw = extractFirstStructuredTerm(response);
         const detail = normalizarRegistroApi(raw, true);
 
         if (!detail) {
@@ -2446,7 +3608,7 @@
 
         if (state.selectedId === term.id) {
           setStatus(
-            `${state.terms.length.toLocaleString("pt-BR")} termo(s) | detalhe indisponivel`
+            `${state.terms.length.toLocaleString("pt-BR")} descritor(es) | detalhe indisponível`
           );
         }
       } finally {
@@ -2454,14 +3616,40 @@
       }
     }
 
-    function mergeTermDetail(target, detail) {
+    function buildResolutionMaps(terms) {
+      const byId = new Map();
+      const byName = new Map();
+
+      for (const term of terms) {
+        byId.set(String(term.id), term);
+        const key = normalizeIcmgName(term.termo);
+        if (key && !byName.has(key)) byName.set(key, term);
+      }
+
+      return { byId, byName };
+    }
+
+    function mergeTermDetail(
+      target,
+      detail,
+      {
+        byId = termById,
+        byName = termByName,
+        rebuild = true
+      } = {}
+    ) {
       target.termo = detail.termo || target.termo;
+      target.numdoc = detail.numdoc || target.numdoc || null;
+      target._hierarchyOnly = false;
       target.termoAnterior =
         detail.termoAnterior || target.termoAnterior || "";
       target.conceito = detail.conceito || target.conceito || "";
-      target.definicao = detail.definicao || "";
-      target.notaEscopo = detail.notaEscopo || "";
-      target.notaUso = detail.notaUso || "";
+      target.definicao = detail.definicao || target.definicao || "";
+      target.notaEscopo = detail.notaEscopo || target.notaEscopo || "";
+      target.notaUso = detail.notaUso || target.notaUso || "";
+      if (detail.ativo !== null && detail.ativo !== undefined) {
+        target.ativo = detail.ativo;
+      }
 
       if (detail.relacionadosNaoAutorizados.length) {
         target.relacionadosNaoAutorizados = Array.from(
@@ -2472,17 +3660,9 @@
         );
       }
 
-      // Resolve as referencias do detalhe contra os indices ja existentes.
-      const byName = new Map(
-        state.terms.map(term => [
-          normalizeIcmgName(term.termo),
-          term
-        ])
-      );
-
       const parent = resolveReferenceToTerm(
         detail._parentReference,
-        termById,
+        byId,
         byName
       );
 
@@ -2495,7 +3675,7 @@
       for (const ref of detail._relatedReferences || []) {
         const related = resolveReferenceToTerm(
           ref,
-          termById,
+          byId,
           byName
         );
 
@@ -2512,9 +3692,34 @@
         target.relacionados = relatedIds;
       }
 
-      cleanupInternalApiFields(detail);
-      buildIndexes();
+      // TE tambem ajuda a reconstruir a hierarquia quando o detalhe do
+      // proprio filho nao explicita TG.
+      for (const ref of detail._specificReferences || []) {
+        const child = resolveReferenceToTerm(ref, byId, byName);
+
+        if (
+          child &&
+          child.id !== target.id &&
+          !child.parentId
+        ) {
+          child.parentId = target.id;
+        }
+      }
+
+      target._hierarchyPaths = Array.from(
+        new Set([
+          ...(target._hierarchyPaths || []),
+          ...(detail._hierarchyPaths || [])
+        ])
+      );
+
+      target._detailsLoaded = true;
+
+      if (rebuild) {
+        buildIndexes();
+      }
     }
+
     function setStatus(message) {
       headerStatus.textContent = message || "";
     }
@@ -2527,6 +3732,7 @@
 
     function buildIndexes() {
       termById = new Map();
+      termByName = new Map();
       childrenByParent = new Map();
       termPathCache = new Map();
 
@@ -2535,6 +3741,11 @@
           String(term.id),
           term
         );
+
+        const nameKey = normalizeIcmgName(term.termo);
+        if (nameKey && !termByName.has(nameKey)) {
+          termByName.set(nameKey, term);
+        }
 
         const key = parentKey(term.parentId);
 
@@ -2576,20 +3787,25 @@
       );
     }
 
-    function rootTermIds() {
-      return childrenOf(null).map(
-        term => term.id
+    function visibleRootTerms() {
+      const thesaurusRoot = termByName.get(
+        normalizeIcmgName("Thesaurus")
       );
+
+      if (thesaurusRoot) {
+        return childrenOf(thesaurusRoot.id);
+      }
+
+      return childrenOf(null);
+    }
+
+    function rootTermIds() {
+      return visibleRootTerms().map(term => term.id);
     }
 
     function firstSelectableTermId() {
-      const roots = childrenOf(null);
-
-      if (!roots.length) {
-        return null;
-      }
-
-      return roots[0].id;
+      const roots = visibleRootTerms();
+      return roots.length ? roots[0].id : null;
     }
 
     function displayTermName(term) {
@@ -2627,7 +3843,11 @@
         !guard.has(current.id)
       ) {
         guard.add(current.id);
-        parts.push(displayTermName(current));
+
+        if (normalizeIcmgName(current.termo) !== "thesaurus") {
+          parts.push(displayTermName(current));
+        }
+
         current = getTerm(current.parentId);
       }
 
@@ -2708,7 +3928,7 @@
 
       treeEl.innerHTML = "";
 
-      const roots = childrenOf(null);
+      const roots = visibleRootTerms();
 
       if (!roots.length) {
         treeEl.innerHTML =
