@@ -178,6 +178,42 @@
       letter-spacing: 0.01em;
     }
 
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    #headerStatus {
+      font-size: 13px;
+      font-weight: normal;
+      text-transform: none;
+      text-align: right;
+    }
+
+    .refresh-data-button {
+      flex: 0 0 auto;
+      border: 1px solid rgba(255, 255, 255, 0.85);
+      background: transparent;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 5px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .refresh-data-button:hover {
+      background: rgba(255, 255, 255, 0.13);
+    }
+
+    .refresh-data-button:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
+
     .search-card-title {
       display: flex;
       align-items: center;
@@ -634,6 +670,16 @@
         padding: 14px 0 22px;
       }
 
+      .header-actions {
+        align-items: flex-end;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      #headerStatus {
+        text-align: right;
+      }
+
       .search-card-body {
         grid-template-columns: 1fr;
       }
@@ -904,7 +950,18 @@
           <span>Pesquisar Thesaurus</span>
         </div>
 
-        <span id="headerStatus">Carregando dados...</span>
+        <div class="header-actions">
+          <span id="headerStatus">Carregando dados...</span>
+
+          <button
+            id="refreshDataBtn"
+            class="refresh-data-button"
+            type="button"
+            title="Ignora o cache e consulta novamente a API de Dados Abertos da ALMG"
+          >
+            Atualizar dados
+          </button>
+        </div>
       </div>
 
       <div class="search-card-body">
@@ -973,13 +1030,35 @@
 
   <script>
     // ============================================================
-    // CONFIGURAÇÃO
-    // Mantenha o arquivo TXT neste caminho relativo, ou altere aqui.
-    // A página precisa ser servida por HTTP/HTTPS para o fetch funcionar.
-    // Ex.: GitHub Pages, IIS, Apache, Nginx, Live Server etc.
+    // CONFIGURACAO DA API E DO CACHE
     // ============================================================
 
-    const ICMG_TXT_URL = "dados/ICMG.txt";
+    const API_BASE_URL =
+      "https://dadosabertos.almg.gov.br/api/v2/thesaurus";
+
+    const API_LIST_URL =
+      `${API_BASE_URL}/termos/lista`;
+
+    // Mantido aqui para referencia. A busca da pagina continua local,
+    // porque o snapshot diario ja fica carregado no navegador.
+    const API_SEARCH_URL =
+      `${API_BASE_URL}/termos/pesquisa`;
+
+    const API_TERM_URL = numero =>
+      `${API_BASE_URL}/termos/${encodeURIComponent(numero)}`;
+
+    // Horario local do navegador. Se a pagina estiver fechada as 3h,
+    // a atualizacao sera feita no primeiro acesso posterior a esse horario.
+    const DAILY_REFRESH_HOUR = 3;
+
+    // A ALMG recomenda intervalo minimo de um segundo entre requisicoes.
+    const API_MIN_INTERVAL_MS = 1100;
+
+    const CACHE_DB_NAME = "thesaurus_almg_cache";
+    const CACHE_DB_VERSION = 1;
+    const CACHE_STORE_NAME = "snapshots";
+    const CACHE_KEY = "thesaurus_atual";
+    const CACHE_SCHEMA_VERSION = 1;
 
     let state = {
       selectedId: null,
@@ -990,6 +1069,10 @@
     let termById = new Map();
     let childrenByParent = new Map();
     let termPathCache = new Map();
+    let lastApiRequestFinishedAt = 0;
+    let refreshTimer = null;
+    let refreshInProgress = false;
+    let cacheSaveTimer = null;
 
     const treeEl = document.getElementById("tree");
     const termArea = document.getElementById("termArea");
@@ -999,6 +1082,7 @@
     const collapseBtn = document.getElementById("collapseBtn");
     const expandClassesBtn = document.getElementById("expandClassesBtn");
     const headerStatus = document.getElementById("headerStatus");
+    const refreshDataBtn = document.getElementById("refreshDataBtn");
     const splitter = document.getElementById("splitter");
 
     const LAYOUT_KEY = "consulta_thesaurus_left_width";
@@ -1049,6 +1133,13 @@
         renderTree();
       });
 
+      refreshDataBtn.addEventListener("click", () => {
+        atualizarDadosDaApi({
+          force: true,
+          reason: "manual"
+        });
+      });
+
       window.addEventListener("hashchange", () => {
         const id = decodeURIComponent(
           location.hash.replace(/^#/, "")
@@ -1079,7 +1170,6 @@
         openTerm(firstMatch.id);
       }
     }
-
     function setLeftWidth(px) {
       const min = 300;
 
@@ -1183,87 +1273,1195 @@
       });
     }
 
+    // ============================================================
+    // CARGA INICIAL, CACHE DIARIO E ATUALIZACAO MANUAL
+    // ============================================================
+
     async function loadState() {
+      let cached = null;
+
       try {
-        setStatus("Carregando...");
+        setStatus("Verificando cache local...");
+        cached = await readCache();
+      } catch (error) {
+        console.warn("Nao foi possivel ler o cache IndexedDB.", error);
+      }
 
-        const response = await fetch(
-          `${ICMG_TXT_URL}?v=${Date.now()}`,
-          {
-            cache: "no-store"
-          }
-        );
+      const currentCycle = getRefreshCycleKey(new Date());
+      const cacheIsUsable =
+        cached &&
+        cached.schemaVersion === CACHE_SCHEMA_VERSION &&
+        Array.isArray(cached.terms) &&
+        cached.terms.length;
 
-        if (!response.ok) {
-          throw new Error(
-            `Não foi possível carregar ${ICMG_TXT_URL}. HTTP ${response.status}`
+      if (cacheIsUsable) {
+        applyTerms(cached.terms, {
+          updatedAt: cached.updatedAt,
+          source: "cache"
+        });
+      }
+
+      if (
+        cacheIsUsable &&
+        cached.cycleKey === currentCycle
+      ) {
+        setReadyStatus(cached.updatedAt, "cache");
+      } else {
+        if (cacheIsUsable) {
+          setStatus(
+            "Dados em cache; verificando atualizacao diaria..."
           );
         }
 
-        const buffer = await response.arrayBuffer();
+        await atualizarDadosDaApi({
+          force: true,
+          reason: cacheIsUsable ? "daily" : "initial",
+          keepExistingOnError: cacheIsUsable
+        });
+      }
 
-        /*
-         * O TXT original do ICMG costuma estar em Windows-1252.
-         * Se o arquivo estiver em UTF-8, troque por "utf-8".
-         */
-        const text = new TextDecoder(
-          "windows-1252"
-        ).decode(buffer);
+      scheduleNextDailyRefresh();
+    }
 
-        const terms =
-          montarTermosDaEstruturaIcmg(text);
+    async function atualizarDadosDaApi({
+      force = false,
+      reason = "manual",
+      keepExistingOnError = true
+    } = {}) {
+      if (refreshInProgress) {
+        return;
+      }
 
-        state = {
-          selectedId: null,
-          expanded: [],
+      refreshInProgress = true;
+      setRefreshButtonBusy(true);
+
+      const previousTerms = state.terms;
+
+      try {
+        if (!force) {
+          const cached = await readCache();
+          const cycle = getRefreshCycleKey(new Date());
+
+          if (
+            cached &&
+            cached.schemaVersion === CACHE_SCHEMA_VERSION &&
+            cached.cycleKey === cycle &&
+            Array.isArray(cached.terms) &&
+            cached.terms.length
+          ) {
+            applyTerms(cached.terms, {
+              updatedAt: cached.updatedAt,
+              source: "cache"
+            });
+
+            setReadyStatus(cached.updatedAt, "cache");
+            return;
+          }
+        }
+
+        setStatus(
+          reason === "manual"
+            ? "Atualizando dados pela API..."
+            : "Buscando atualizacao diaria na API..."
+        );
+
+        const payload = await apiFetchJson(API_LIST_URL);
+        const rawTerms = extractList(payload);
+        const terms = adaptarListaDaApi(rawTerms);
+
+        if (!terms.length) {
+          throw new Error(
+            "A API respondeu, mas nenhum termo foi reconhecido."
+          );
+        }
+
+        const now = new Date();
+        const snapshot = {
+          schemaVersion: CACHE_SCHEMA_VERSION,
+          cycleKey: getRefreshCycleKey(now),
+          updatedAt: now.toISOString(),
           terms
         };
 
-        buildIndexes();
+        await writeCache(snapshot);
 
-        /*
-         * Inicia com as classes principais recolhidas.
-         */
-        state.expanded = [];
+        applyTerms(terms, {
+          updatedAt: snapshot.updatedAt,
+          source: "api"
+        });
 
-        const hashId = decodeURIComponent(
-          location.hash.replace(/^#/, "")
-        );
-
-        if (hashId && getTerm(hashId)) {
-          state.selectedId = hashId;
-          expandAncestors(hashId);
-        } else {
-          state.selectedId =
-            firstSelectableTermId();
-        }
-
-        render();
-
-        setStatus(
-          `${state.terms.length.toLocaleString("pt-BR")} termo(s)`
-        );
+        setReadyStatus(snapshot.updatedAt, "api");
       } catch (error) {
         console.error(error);
 
-        treeEl.innerHTML =
-          '<div class="empty">Nenhum termo carregado.</div>';
+        if (
+          keepExistingOnError &&
+          Array.isArray(previousTerms) &&
+          previousTerms.length
+        ) {
+          setStatus(
+            `Falha ao atualizar; mantendo cache local. ${error.message}`
+          );
+        } else {
+          treeEl.innerHTML =
+            '<div class="empty">Nenhum termo carregado.</div>';
 
-        termArea.innerHTML = `
-          <div class="error">
-            <strong>Não foi possível carregar o arquivo do thesaurus.</strong><br>
-            Verifique se o arquivo
-            <code>${escapeHtml(ICMG_TXT_URL)}</code>
-            existe e se a página está sendo aberta por um servidor web.
-            <br><br>
-            Detalhe técnico: ${escapeHtml(error.message)}
-          </div>
-        `;
+          termArea.innerHTML = `
+            <div class="error">
+              <strong>Nao foi possivel carregar o thesaurus pela API.</strong><br>
+              A pagina tentou consultar:<br>
+              <code>${escapeHtml(API_LIST_URL)}</code>
+              <br><br>
+              Detalhe tecnico: ${escapeHtml(error.message)}
+              <br><br>
+              Se o navegador mencionar <strong>CORS</strong>, sera necessario
+              publicar a pagina no mesmo dominio autorizado ou usar um pequeno
+              proxy/backend no servidor da pagina.
+            </div>
+          `;
 
-        setStatus("Erro ao carregar dados.");
+          setStatus("Erro ao carregar dados.");
+        }
+      } finally {
+        refreshInProgress = false;
+        setRefreshButtonBusy(false);
       }
     }
 
+    function applyTerms(terms, meta = {}) {
+      const previousSelectedId = state.selectedId;
+
+      state = {
+        selectedId: null,
+        expanded: [],
+        terms: Array.isArray(terms) ? terms : []
+      };
+
+      buildIndexes();
+
+      const hashId = decodeURIComponent(
+        location.hash.replace(/^#/, "")
+      );
+
+      if (hashId && getTerm(hashId)) {
+        state.selectedId = hashId;
+        expandAncestors(hashId);
+      } else if (
+        previousSelectedId &&
+        getTerm(previousSelectedId)
+      ) {
+        state.selectedId = previousSelectedId;
+        expandAncestors(previousSelectedId);
+      } else {
+        state.selectedId = firstSelectableTermId();
+      }
+
+      render();
+
+      const selected = getTerm(state.selectedId);
+      if (selected) {
+        carregarDetalhesSeNecessario(selected);
+      }
+    }
+
+    function setReadyStatus(updatedAt, source) {
+      const count = state.terms.length.toLocaleString("pt-BR");
+      const dateText = formatDateTime(updatedAt);
+      const suffix = source === "api" ? "API" : "cache";
+
+      setStatus(
+        `${count} termo(s) | atualizado em ${dateText} | ${suffix}`
+      );
+    }
+
+    function setRefreshButtonBusy(isBusy) {
+      if (!refreshDataBtn) {
+        return;
+      }
+
+      refreshDataBtn.disabled = Boolean(isBusy);
+      refreshDataBtn.textContent = isBusy
+        ? "Atualizando..."
+        : "Atualizar dados";
+    }
+
+    function formatDateTime(value) {
+      if (!value) {
+        return "data desconhecida";
+      }
+
+      const date = new Date(value);
+
+      if (Number.isNaN(date.getTime())) {
+        return "data desconhecida";
+      }
+
+      return new Intl.DateTimeFormat("pt-BR", {
+        dateStyle: "short",
+        timeStyle: "short"
+      }).format(date);
+    }
+
+    function getRefreshCycleKey(date) {
+      const adjusted = new Date(date);
+
+      if (adjusted.getHours() < DAILY_REFRESH_HOUR) {
+        adjusted.setDate(adjusted.getDate() - 1);
+      }
+
+      const year = adjusted.getFullYear();
+      const month = String(adjusted.getMonth() + 1).padStart(2, "0");
+      const day = String(adjusted.getDate()).padStart(2, "0");
+
+      return `${year}-${month}-${day}`;
+    }
+
+    function nextDailyRefreshDate(fromDate = new Date()) {
+      const next = new Date(fromDate);
+      next.setHours(DAILY_REFRESH_HOUR, 0, 0, 0);
+
+      if (next <= fromDate) {
+        next.setDate(next.getDate() + 1);
+      }
+
+      return next;
+    }
+
+    function scheduleNextDailyRefresh() {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+
+      const now = new Date();
+      const next = nextDailyRefreshDate(now);
+      const delay = Math.max(1000, next.getTime() - now.getTime() + 5000);
+
+      refreshTimer = setTimeout(async () => {
+        await atualizarDadosDaApi({
+          force: true,
+          reason: "daily"
+        });
+
+        scheduleNextDailyRefresh();
+      }, delay);
+    }
+
+    // ============================================================
+    // INDEXEDDB
+    // ============================================================
+
+    function openCacheDb() {
+      return new Promise((resolve, reject) => {
+        if (!("indexedDB" in window)) {
+          reject(new Error("IndexedDB nao esta disponivel neste navegador."));
+          return;
+        }
+
+        const request = indexedDB.open(
+          CACHE_DB_NAME,
+          CACHE_DB_VERSION
+        );
+
+        request.onupgradeneeded = () => {
+          const db = request.result;
+
+          if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
+            db.createObjectStore(CACHE_STORE_NAME);
+          }
+        };
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function readCache() {
+      const db = await openCacheDb();
+
+      try {
+        return await new Promise((resolve, reject) => {
+          const tx = db.transaction(CACHE_STORE_NAME, "readonly");
+          const store = tx.objectStore(CACHE_STORE_NAME);
+          const request = store.get(CACHE_KEY);
+
+          request.onsuccess = () => resolve(request.result || null);
+          request.onerror = () => reject(request.error);
+        });
+      } finally {
+        db.close();
+      }
+    }
+
+    async function writeCache(snapshot) {
+      const db = await openCacheDb();
+
+      try {
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(CACHE_STORE_NAME, "readwrite");
+          const store = tx.objectStore(CACHE_STORE_NAME);
+
+          store.put(snapshot, CACHE_KEY);
+
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error);
+        });
+      } finally {
+        db.close();
+      }
+    }
+
+    function scheduleCacheSave() {
+      if (cacheSaveTimer) {
+        clearTimeout(cacheSaveTimer);
+      }
+
+      cacheSaveTimer = setTimeout(async () => {
+        try {
+          const existing = await readCache();
+
+          await writeCache({
+            schemaVersion: CACHE_SCHEMA_VERSION,
+            cycleKey:
+              existing?.cycleKey || getRefreshCycleKey(new Date()),
+            updatedAt:
+              existing?.updatedAt || new Date().toISOString(),
+            terms: state.terms
+          });
+        } catch (error) {
+          console.warn("Nao foi possivel atualizar o cache.", error);
+        }
+      }, 400);
+    }
+
+    // ============================================================
+    // CLIENTE DA API
+    // ============================================================
+
+    async function apiFetchJson(url) {
+      const elapsed =
+        Date.now() - lastApiRequestFinishedAt;
+
+      if (
+        lastApiRequestFinishedAt &&
+        elapsed < API_MIN_INTERVAL_MS
+      ) {
+        await sleep(API_MIN_INTERVAL_MS - elapsed);
+      }
+
+      let response;
+
+      try {
+        response = await fetch(url, {
+          method: "GET",
+          headers: {
+            Accept: "application/json"
+          },
+          cache: "no-store"
+        });
+      } catch (error) {
+        throw new Error(
+          `Falha de rede ao consultar a API: ${error.message}`
+        );
+      } finally {
+        lastApiRequestFinishedAt = Date.now();
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `API retornou HTTP ${response.status} em ${url}`
+        );
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+
+      if (!contentType.toLowerCase().includes("json")) {
+        const text = await response.text();
+        throw new Error(
+          `Resposta inesperada da API (${contentType || "sem content-type"}): ` +
+          text.slice(0, 180)
+        );
+      }
+
+      return response.json();
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function extractList(payload) {
+      const visited = new Set();
+
+      function walk(value, depth = 0) {
+        if (depth > 5 || value == null) {
+          return null;
+        }
+
+        if (Array.isArray(value)) {
+          return value;
+        }
+
+        if (typeof value !== "object") {
+          return null;
+        }
+
+        if (visited.has(value)) {
+          return null;
+        }
+
+        visited.add(value);
+
+        const preferredKeys = [
+          "termos",
+          "lista",
+          "itens",
+          "items",
+          "resultados",
+          "results",
+          "content",
+          "dados",
+          "data"
+        ];
+
+        for (const key of preferredKeys) {
+          if (key in value) {
+            const found = walk(value[key], depth + 1);
+            if (found) {
+              return found;
+            }
+          }
+        }
+
+        for (const child of Object.values(value)) {
+          const found = walk(child, depth + 1);
+          if (found) {
+            return found;
+          }
+        }
+
+        return null;
+      }
+
+      const result = walk(payload);
+
+      if (!Array.isArray(result)) {
+        throw new Error(
+          "Nao foi localizada uma lista de termos no JSON retornado pela API."
+        );
+      }
+
+      return result;
+    }
+
+    function extractDetail(payload) {
+      if (
+        payload &&
+        typeof payload === "object" &&
+        !Array.isArray(payload)
+      ) {
+        const preferredKeys = [
+          "termo",
+          "item",
+          "resultado",
+          "dados",
+          "data"
+        ];
+
+        for (const key of preferredKeys) {
+          const value = payload[key];
+
+          if (
+            value &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+          ) {
+            return value;
+          }
+        }
+
+        return payload;
+      }
+
+      if (Array.isArray(payload) && payload.length) {
+        return payload[0];
+      }
+
+      throw new Error("Detalhe de termo vazio ou em formato inesperado.");
+    }
+
+    // ============================================================
+    // ADAPTADOR API -> MODELO INTERNO DA PAGINA
+    // ============================================================
+
+    function adaptarListaDaApi(rawTerms) {
+      const provisional = rawTerms
+        .map(raw => normalizarRegistroApi(raw, false))
+        .filter(Boolean);
+
+      const authorized = provisional.filter(term =>
+        term._authorized !== false &&
+        !isTermoIcmgDescartado(term.termo)
+      );
+
+      const nonAuthorized = provisional.filter(term =>
+        term._authorized === false
+      );
+
+      const byId = new Map();
+      const byName = new Map();
+
+      for (const term of authorized) {
+        byId.set(String(term.id), term);
+        byName.set(normalizeIcmgName(term.termo), term);
+      }
+
+      // Se a API trouxer termos nao autorizados como registros separados,
+      // associa-os ao descritor autorizado quando houver referencia USE.
+      for (const up of nonAuthorized) {
+        const target = resolveReferenceToTerm(
+          up._useReference,
+          byId,
+          byName
+        );
+
+        if (target) {
+          if (!target.relacionadosNaoAutorizados.includes(up.termo)) {
+            target.relacionadosNaoAutorizados.push(up.termo);
+          }
+        }
+      }
+
+      // Resolve TG e TR por numero ou pelo nome do termo.
+      for (const term of authorized) {
+        const parent = resolveReferenceToTerm(
+          term._parentReference,
+          byId,
+          byName
+        );
+
+        term.parentId = parent ? parent.id : null;
+
+        const relatedIds = [];
+
+        for (const ref of term._relatedReferences) {
+          const related = resolveReferenceToTerm(
+            ref,
+            byId,
+            byName
+          );
+
+          if (
+            related &&
+            related.id !== term.id &&
+            !relatedIds.includes(related.id)
+          ) {
+            relatedIds.push(related.id);
+          }
+        }
+
+        term.relacionados = relatedIds;
+      }
+
+      // Termos especificos tambem podem informar a hierarquia.
+      // Servem como segunda fonte se o TG nao vier preenchido na lista.
+      for (const parent of authorized) {
+        for (const childRef of parent._specificReferences) {
+          const child = resolveReferenceToTerm(
+            childRef,
+            byId,
+            byName
+          );
+
+          if (
+            child &&
+            child.id !== parent.id &&
+            !child.parentId
+          ) {
+            child.parentId = parent.id;
+          }
+        }
+      }
+
+      // Se a API trouxer o campo Classe e ele nao corresponder a um TG,
+      // cria os mesmos nos estruturais que a versao TXT usava.
+      const classes = Array.from(
+        new Set(
+          authorized
+            .filter(term => !term.parentId)
+            .map(term => term._classe)
+            .filter(classe =>
+              classe &&
+              !isClasseIcmgSemRaiz(classe) &&
+              !isClasseIcmgDescartada(classe)
+            )
+        )
+      ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+      const classTerms = classes.map(classe => ({
+        id: `classe-${slugIcmg(classe)}`,
+        numdoc: null,
+        parentId: null,
+        termo: classe,
+        termoAnterior: "",
+        conceito: "",
+        definicao: "Classe geral informada pela API do Thesaurus.",
+        notaEscopo: "",
+        notaUso: "",
+        relacionados: [],
+        relacionadosNaoAutorizados: [],
+        _detailsLoaded: true,
+        _syntheticClass: true
+      }));
+
+      const classIdByName = new Map(
+        classTerms.map(term => [
+          normalizeIcmgName(term.termo),
+          term.id
+        ])
+      );
+
+      for (const term of authorized) {
+        if (
+          !term.parentId &&
+          term._classe &&
+          !isClasseIcmgSemRaiz(term._classe)
+        ) {
+          term.parentId =
+            classIdByName.get(
+              normalizeIcmgName(term._classe)
+            ) || null;
+        }
+
+        cleanupInternalApiFields(term);
+      }
+
+      return classTerms.concat(authorized);
+    }
+
+    function normalizarRegistroApi(raw, fromDetail) {
+      if (!raw || typeof raw !== "object") {
+        return null;
+      }
+
+      const numeroValue = getField(raw, [
+        "numero",
+        "numdoc",
+        "numeroDocumento",
+        "numeroDoc",
+        "codigo",
+        "id"
+      ]);
+
+      const termoValue = getField(raw, [
+        "termo",
+        "nome",
+        "descricao",
+        "descritor"
+      ]);
+
+      const termo = referenceLabel(termoValue);
+
+      if (!termo) {
+        return null;
+      }
+
+      const numero = referenceNumber(numeroValue) ||
+        referenceNumber(raw) ||
+        null;
+
+      const autorizadoValue = getField(raw, [
+        "autorizado",
+        "termoAutorizado",
+        "ehAutorizado"
+      ]);
+
+      const ativoValue = getField(raw, [
+        "ativo",
+        "situacao",
+        "status"
+      ]);
+
+      const parentReference = getField(raw, [
+        "termoGeral",
+        "termoPai",
+        "pai",
+        "tg"
+      ]);
+
+      const specificReferences = normalizeReferenceArray(
+        getField(raw, [
+          "termosEspecificos",
+          "termoEspecifico",
+          "filhos",
+          "te"
+        ])
+      );
+
+      const relatedReferences = normalizeReferenceArray(
+        getField(raw, [
+          "termosRelacionados",
+          "termoRelacionado",
+          "relacionados",
+          "tr"
+        ])
+      );
+
+      const unauthorizedValues = normalizeReferenceArray(
+        getField(raw, [
+          "termosNaoAutorizados",
+          "naoAutorizados",
+          "usadoPor",
+          "usadosPor",
+          "sinonimos",
+          "up"
+        ])
+      )
+        .map(referenceLabel)
+        .filter(Boolean);
+
+      const useReference = getField(raw, [
+        "use",
+        "usar",
+        "termoPreferido",
+        "descritorAutorizado",
+        "termoAutorizadoReferencia"
+      ]);
+
+      const detailsLoaded = Boolean(fromDetail) || hasAnyField(raw, [
+        "definicao",
+        "notaExplicativa",
+        "notaHistorica",
+        "termosRelacionados",
+        "termosEspecificos",
+        "termosNaoAutorizados",
+        "naoAutorizados",
+        "usadoPor"
+      ]);
+
+      return {
+        id: numero != null
+          ? `icmg-${String(numero)}`
+          : `icmg-${slugIcmg(termo)}`,
+        numdoc: numero != null ? String(numero) : null,
+        parentId: null,
+        termo,
+        termoAnterior: textValue(
+          getField(raw, [
+            "termoAnterior",
+            "nomeAnterior"
+          ])
+        ),
+        conceito: textValue(
+          getField(raw, [
+            "conceito",
+            "tq"
+          ])
+        ),
+        definicao: textValue(
+          getField(raw, ["definicao", "df"])
+        ),
+        notaEscopo: textValue(
+          getField(raw, [
+            "notaExplicativa",
+            "notaEscopo",
+            "ne"
+          ])
+        ),
+        notaUso: textValue(
+          getField(raw, [
+            "notaHistorica",
+            "notaUso",
+            "nh"
+          ])
+        ),
+        relacionados: [],
+        relacionadosNaoAutorizados: Array.from(
+          new Set(unauthorizedValues)
+        ),
+        _authorized: parseYesNo(autorizadoValue, true),
+        _active: parseActive(ativoValue),
+        _classe: textValue(
+          getField(raw, ["classe", "categoria"])
+        ),
+        _parentReference: parentReference,
+        _specificReferences: specificReferences,
+        _relatedReferences: relatedReferences,
+        _useReference: useReference,
+        _detailsLoaded: detailsLoaded,
+        _detailLoading: false,
+        _syntheticClass: false
+      };
+    }
+
+    function cleanupInternalApiFields(term) {
+      delete term._authorized;
+      delete term._active;
+      delete term._classe;
+      delete term._parentReference;
+      delete term._specificReferences;
+      delete term._relatedReferences;
+      delete term._useReference;
+    }
+
+    function getField(obj, aliases) {
+      if (!obj || typeof obj !== "object") {
+        return undefined;
+      }
+
+      const index = new Map(
+        Object.keys(obj).map(key => [
+          normalizeObjectKey(key),
+          key
+        ])
+      );
+
+      for (const alias of aliases) {
+        const realKey = index.get(
+          normalizeObjectKey(alias)
+        );
+
+        if (realKey !== undefined) {
+          return obj[realKey];
+        }
+      }
+
+      return undefined;
+    }
+
+    function hasAnyField(obj, aliases) {
+      if (!obj || typeof obj !== "object") {
+        return false;
+      }
+
+      const keys = new Set(
+        Object.keys(obj).map(normalizeObjectKey)
+      );
+
+      return aliases.some(alias =>
+        keys.has(normalizeObjectKey(alias))
+      );
+    }
+
+    function normalizeObjectKey(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .toLowerCase();
+    }
+
+    function textValue(value) {
+      if (value == null) {
+        return "";
+      }
+
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+      ) {
+        return String(value).trim();
+      }
+
+      if (Array.isArray(value)) {
+        return value
+          .map(textValue)
+          .filter(Boolean)
+          .join("\n\n");
+      }
+
+      if (typeof value === "object") {
+        return referenceLabel(value);
+      }
+
+      return "";
+    }
+
+    function normalizeReferenceArray(value) {
+      if (value == null || value === "") {
+        return [];
+      }
+
+      if (Array.isArray(value)) {
+        return value;
+      }
+
+      if (typeof value === "object") {
+        for (const key of [
+          "termos",
+          "itens",
+          "items",
+          "lista",
+          "content",
+          "dados"
+        ]) {
+          const nested = getField(value, [key]);
+          if (Array.isArray(nested)) {
+            return nested;
+          }
+        }
+      }
+
+      if (typeof value === "string" && value.includes(";")) {
+        return value
+          .split(";")
+          .map(item => item.trim())
+          .filter(Boolean);
+      }
+
+      return [value];
+    }
+
+    function referenceNumber(value) {
+      if (value == null) {
+        return null;
+      }
+
+      if (
+        typeof value === "number" ||
+        (typeof value === "string" && /^\d+$/.test(value.trim()))
+      ) {
+        return String(value).trim();
+      }
+
+      if (typeof value === "object") {
+        const nested = getField(value, [
+          "numero",
+          "numdoc",
+          "numeroDocumento",
+          "codigo",
+          "id"
+        ]);
+
+        if (nested !== undefined && nested !== value) {
+          return referenceNumber(nested);
+        }
+      }
+
+      return null;
+    }
+
+    function referenceLabel(value) {
+      if (value == null) {
+        return "";
+      }
+
+      if (
+        typeof value === "string" ||
+        typeof value === "number"
+      ) {
+        return String(value).trim();
+      }
+
+      if (typeof value === "object") {
+        const nested = getField(value, [
+          "termo",
+          "nome",
+          "descricao",
+          "descritor",
+          "valor",
+          "label"
+        ]);
+
+        if (nested !== undefined && nested !== value) {
+          return referenceLabel(nested);
+        }
+      }
+
+      return "";
+    }
+
+    function parseYesNo(value, defaultValue = true) {
+      if (value == null || value === "") {
+        return defaultValue;
+      }
+
+      if (typeof value === "boolean") {
+        return value;
+      }
+
+      const normalized = normalizeIcmgName(value);
+
+      if (["sim", "s", "true", "1", "autorizado"].includes(normalized)) {
+        return true;
+      }
+
+      if (["nao", "n", "false", "0", "nao autorizado"].includes(normalized)) {
+        return false;
+      }
+
+      return defaultValue;
+    }
+
+    function parseActive(value) {
+      if (value == null || value === "") {
+        return null;
+      }
+
+      const normalized = normalizeIcmgName(value);
+
+      if (["sim", "s", "true", "1", "ativo", "ativa"].includes(normalized)) {
+        return true;
+      }
+
+      if (["nao", "n", "false", "0", "inativo", "inativa"].includes(normalized)) {
+        return false;
+      }
+
+      return null;
+    }
+
+    function resolveReferenceToTerm(ref, byId, byName) {
+      if (ref == null || ref === "") {
+        return null;
+      }
+
+      const number = referenceNumber(ref);
+
+      if (number != null) {
+        const byNumber = byId.get(`icmg-${number}`);
+        if (byNumber) {
+          return byNumber;
+        }
+      }
+
+      const label = referenceLabel(ref);
+
+      if (label) {
+        return byName.get(normalizeIcmgName(label)) || null;
+      }
+
+      return null;
+    }
+
+    // ============================================================
+    // DETALHE POR NUMDOC - SOB DEMANDA E COM CACHE
+    // ============================================================
+
+    async function carregarDetalhesSeNecessario(term) {
+      if (
+        !term ||
+        term._syntheticClass ||
+        term._detailsLoaded ||
+        term._detailLoading ||
+        !term.numdoc
+      ) {
+        return;
+      }
+
+      term._detailLoading = true;
+
+      if (state.selectedId === term.id) {
+        setStatus(
+          `${state.terms.length.toLocaleString("pt-BR")} termo(s) | carregando detalhes...`
+        );
+      }
+
+      try {
+        const payload = await apiFetchJson(
+          API_TERM_URL(term.numdoc)
+        );
+
+        const raw = extractDetail(payload);
+        const detail = normalizarRegistroApi(raw, true);
+
+        if (!detail) {
+          throw new Error("Detalhe do termo nao reconhecido.");
+        }
+
+        mergeTermDetail(term, detail);
+        term._detailsLoaded = true;
+        scheduleCacheSave();
+
+        if (state.selectedId === term.id) {
+          renderTermArea();
+
+          const cached = await readCache().catch(() => null);
+          setReadyStatus(
+            cached?.updatedAt || new Date().toISOString(),
+            "cache"
+          );
+        }
+      } catch (error) {
+        console.warn(
+          `Nao foi possivel carregar detalhes de ${term.termo}.`,
+          error
+        );
+
+        term._detailsLoaded = false;
+
+        if (state.selectedId === term.id) {
+          setStatus(
+            `${state.terms.length.toLocaleString("pt-BR")} termo(s) | detalhe indisponivel`
+          );
+        }
+      } finally {
+        term._detailLoading = false;
+      }
+    }
+
+    function mergeTermDetail(target, detail) {
+      target.termo = detail.termo || target.termo;
+      target.termoAnterior =
+        detail.termoAnterior || target.termoAnterior || "";
+      target.conceito = detail.conceito || target.conceito || "";
+      target.definicao = detail.definicao || "";
+      target.notaEscopo = detail.notaEscopo || "";
+      target.notaUso = detail.notaUso || "";
+
+      if (detail.relacionadosNaoAutorizados.length) {
+        target.relacionadosNaoAutorizados = Array.from(
+          new Set([
+            ...(target.relacionadosNaoAutorizados || []),
+            ...detail.relacionadosNaoAutorizados
+          ])
+        );
+      }
+
+      // Resolve as referencias do detalhe contra os indices ja existentes.
+      const byName = new Map(
+        state.terms.map(term => [
+          normalizeIcmgName(term.termo),
+          term
+        ])
+      );
+
+      const parent = resolveReferenceToTerm(
+        detail._parentReference,
+        termById,
+        byName
+      );
+
+      if (parent && parent.id !== target.id) {
+        target.parentId = parent.id;
+      }
+
+      const relatedIds = [];
+
+      for (const ref of detail._relatedReferences || []) {
+        const related = resolveReferenceToTerm(
+          ref,
+          termById,
+          byName
+        );
+
+        if (
+          related &&
+          related.id !== target.id &&
+          !relatedIds.includes(related.id)
+        ) {
+          relatedIds.push(related.id);
+        }
+      }
+
+      if (relatedIds.length) {
+        target.relacionados = relatedIds;
+      }
+
+      cleanupInternalApiFields(detail);
+      buildIndexes();
+    }
     function setStatus(message) {
       headerStatus.textContent = message || "";
     }
@@ -1414,6 +2612,8 @@
           `#${encodeURIComponent(term.id)}`
         );
       }
+
+      carregarDetalhesSeNecessario(term);
     }
 
     function expandAncestors(termId) {
@@ -1965,14 +3165,6 @@
         .toLowerCase();
     }
 
-    function normalizeIcmgKey(value) {
-      return String(value || "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .trim()
-        .toUpperCase();
-    }
-
     function normalizeIcmgName(value) {
       return String(value || "")
         .normalize("NFD")
@@ -2008,409 +3200,6 @@
         normalizeIcmgName(termo)
       );
     }
-
-    function firstField(record, key) {
-      const values =
-        record.fields[key] || [];
-
-      return String(
-        values[0] || ""
-      ).trim();
-    }
-
-    function allFields(record, key) {
-      return (
-        record.fields[key] || []
-      )
-        .map(value =>
-          String(value || "").trim()
-        )
-        .filter(Boolean);
-    }
-
-    function parseIcmgTxt(text) {
-      const lines = String(text || "")
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n")
-        .split("\n");
-
-      const records = [];
-      let current = null;
-      let currentKey = null;
-
-      function startRecord(kind, value) {
-        if (current) {
-          records.push(current);
-        }
-
-        current = {
-          kind,
-          fields: {}
-        };
-
-        currentKey = kind;
-
-        current.fields[currentKey] = [
-          String(value || "").trim()
-        ];
-      }
-
-      function addField(key, value) {
-        if (!current) {
-          return;
-        }
-
-        currentKey = key;
-
-        if (!current.fields[currentKey]) {
-          current.fields[currentKey] = [];
-        }
-
-        current.fields[currentKey].push(
-          String(value || "").trim()
-        );
-      }
-
-      function appendToCurrentField(value) {
-        if (
-          !current ||
-          !currentKey
-        ) {
-          return;
-        }
-
-        const values =
-          current.fields[currentKey];
-
-        if (
-          !values ||
-          !values.length
-        ) {
-          return;
-        }
-
-        const lastIndex =
-          values.length - 1;
-
-        const line = String(
-          value || ""
-        ).trimEnd();
-
-        if (!line.trim()) {
-          values[lastIndex] += "\n";
-        } else if (values[lastIndex]) {
-          values[lastIndex] +=
-            "\n" + line;
-        } else {
-          values[lastIndex] = line;
-        }
-      }
-
-      for (const rawLine of lines) {
-        const line = rawLine.trimEnd();
-
-        const match = line.match(
-          /^\.\.([^:]+?)\.?:\s*(.*)$/
-        );
-
-        if (match) {
-          const key =
-            normalizeIcmgKey(match[1]);
-
-          const value =
-            match[2] || "";
-
-          if (
-            key === "TERMO" ||
-            key === "NAO AUTORIZADO"
-          ) {
-            startRecord(key, value);
-          } else {
-            addField(key, value);
-          }
-        } else {
-          appendToCurrentField(line);
-        }
-      }
-
-      if (current) {
-        records.push(current);
-      }
-
-      return records;
-    }
-
-    function termoFromIcmgRecord(record) {
-      const termo =
-        firstField(record, "TERMO");
-
-      const tq =
-        firstField(record, "TQ");
-
-      const controle =
-        firstField(record, "CONTROLE");
-
-      const classe =
-        firstField(record, "CLASSE") ||
-        "Sem classe";
-
-      const tg =
-        firstField(record, "TG");
-
-      const definicao =
-        firstField(record, "DF");
-
-      /*
-       * NE = Nota Explicativa.
-       */
-      const notaExplicativa =
-        allFields(record, "NE")
-          .join("\n\n");
-
-      /*
-       * NH = Nota Histórica.
-       */
-      const notaHistorica =
-        allFields(record, "NH")
-          .join("\n\n");
-
-      /*
-       * UP = Usado por / sinônimos não autorizados.
-       */
-      const usadosPor =
-        allFields(record, "UP");
-
-      const id = controle
-        ? `icmg-${controle}`
-        : `icmg-${slugIcmg(termo)}`;
-
-      return {
-        id,
-        parentId: null,
-        termo,
-        termoAnterior: "",
-        conceito: tq || "",
-        definicao,
-        notaEscopo: notaExplicativa,
-        notaUso: notaHistorica,
-        relacionados: [],
-        relacionadosNaoAutorizados: usadosPor,
-        _classe: classe,
-        _tg: tg,
-        _tr: allFields(record, "TR")
-      };
-    }
-
-    function montarTermosDaEstruturaIcmg(
-      text
-    ) {
-      const records =
-        parseIcmgTxt(text);
-
-      const authorizedRecords =
-        records.filter(record => {
-          if (
-            record.kind !== "TERMO"
-          ) {
-            return false;
-          }
-
-          const termo =
-            firstField(
-              record,
-              "TERMO"
-            );
-
-          if (!termo) {
-            return false;
-          }
-
-          const classe =
-            firstField(
-              record,
-              "CLASSE"
-            ) || "Sem classe";
-
-          /*
-           * Descarta termos estruturais que
-           * não devem aparecer na árvore.
-           */
-          if (
-            isTermoIcmgDescartado(termo)
-          ) {
-            return false;
-          }
-
-          /*
-           * Descarta classes que não devem
-           * aparecer como raiz nem como termo.
-           */
-          if (
-            isClasseIcmgDescartada(classe)
-          ) {
-            return false;
-          }
-
-          /*
-           * Evita importar o próprio nome
-           * da classe como termo filho.
-           */
-          if (
-            normalizeIcmgName(termo) ===
-            normalizeIcmgName(classe)
-          ) {
-            return false;
-          }
-
-          return true;
-        });
-
-      const terms =
-        authorizedRecords.map(
-          termoFromIcmgRecord
-        );
-
-      const byName = new Map();
-      const byTq = new Map();
-
-      for (const term of terms) {
-        byName.set(
-          normalizeIcmgName(term.termo),
-          term.id
-        );
-
-        if (term.conceito) {
-          byTq.set(
-            normalizeIcmgName(
-              term.conceito
-            ),
-            term.id
-          );
-        }
-      }
-
-      const classes = Array.from(
-        new Set(
-          terms
-            .map(
-              term =>
-                term._classe ||
-                "Sem classe"
-            )
-            .filter(classe =>
-              classe &&
-              !isClasseIcmgSemRaiz(classe) &&
-              !isClasseIcmgDescartada(classe)
-            )
-        )
-      ).sort((a, b) =>
-        a.localeCompare(
-          b,
-          "pt-BR"
-        )
-      );
-
-      const classTerms =
-        classes.map(classe => ({
-          id: `classe-${slugIcmg(classe)}`,
-          parentId: null,
-          termo: classe,
-          termoAnterior: "",
-          conceito: "",
-          definicao:
-            "Classe geral importada do documento ICMG.",
-          notaEscopo: "",
-          notaUso: "",
-          relacionados: [],
-          relacionadosNaoAutorizados: []
-        }));
-
-      const classIdByName =
-        new Map(
-          classTerms.map(term => [
-            normalizeIcmgName(term.termo),
-            term.id
-          ])
-        );
-
-      for (const term of terms) {
-        const tg =
-          term._tg || "";
-
-        const classe =
-          term._classe ||
-          "Sem classe";
-
-        const tgNorm =
-          normalizeIcmgName(tg);
-
-        const classeNorm =
-          normalizeIcmgName(classe);
-
-        const classId =
-          classIdByName.get(
-            classeNorm
-          ) || null;
-
-        if (!tg) {
-          term.parentId = classId;
-        } else if (
-          tgNorm === classeNorm
-        ) {
-          term.parentId = classId;
-        } else if (
-          byName.has(tgNorm)
-        ) {
-          term.parentId =
-            byName.get(tgNorm);
-        } else if (
-          byTq.has(tgNorm)
-        ) {
-          term.parentId =
-            byTq.get(tgNorm);
-        } else {
-          term.parentId = classId;
-        }
-
-        const relatedIds = [];
-
-        for (
-          const relatedName of
-          term._tr || []
-        ) {
-          const relatedNorm =
-            normalizeIcmgName(
-              relatedName
-            );
-
-          const relatedId =
-            byName.get(relatedNorm) ||
-            byTq.get(relatedNorm);
-
-          if (
-            relatedId &&
-            relatedId !== term.id &&
-            !relatedIds.includes(
-              relatedId
-            )
-          ) {
-            relatedIds.push(
-              relatedId
-            );
-          }
-        }
-
-        term.relacionados =
-          relatedIds;
-
-        delete term._classe;
-        delete term._tg;
-        delete term._tr;
-      }
-
-      return classTerms.concat(terms);
-    }
-
     function escapeHtml(value) {
       return String(value ?? "")
         .replaceAll("&", "&amp;")
