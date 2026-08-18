@@ -178,42 +178,6 @@
       letter-spacing: 0.01em;
     }
 
-
-    .header-actions {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 12px;
-      min-width: 0;
-    }
-
-    #headerStatus {
-      font-size: 13px;
-      font-weight: normal;
-      text-transform: none;
-      text-align: right;
-    }
-
-    .refresh-data-button {
-      flex: 0 0 auto;
-      border: 1px solid rgba(255, 255, 255, 0.85);
-      background: transparent;
-      color: #fff;
-      padding: 6px 10px;
-      border-radius: 5px;
-      font-size: 13px;
-      font-weight: 700;
-    }
-
-    .refresh-data-button:hover {
-      background: rgba(255, 255, 255, 0.13);
-    }
-
-    .refresh-data-button:disabled {
-      cursor: wait;
-      opacity: 0.65;
-    }
-
     .search-card-title {
       display: flex;
       align-items: center;
@@ -670,16 +634,6 @@
         padding: 14px 0 22px;
       }
 
-      .header-actions {
-        align-items: flex-end;
-        flex-direction: column;
-        gap: 6px;
-      }
-
-      #headerStatus {
-        text-align: right;
-      }
-
       .search-card-body {
         grid-template-columns: 1fr;
       }
@@ -950,18 +904,7 @@
           <span>Pesquisar Thesaurus</span>
         </div>
 
-        <div class="header-actions">
-          <span id="headerStatus">Carregando dados...</span>
-
-          <button
-            id="refreshDataBtn"
-            class="refresh-data-button"
-            type="button"
-            title="Ignora o cache e consulta novamente a API de Dados Abertos da ALMG"
-          >
-            Atualizar dados
-          </button>
-        </div>
+        <span id="headerStatus">Carregando dados...</span>
       </div>
 
       <div class="search-card-body">
@@ -1030,54 +973,13 @@
 
   <script>
     // ============================================================
-    // CONFIGURAÇÃO DA API E DO CACHE
+    // CONFIGURAÇÃO
+    // Mantenha o arquivo TXT neste caminho relativo, ou altere aqui.
+    // A página precisa ser servida por HTTP/HTTPS para o fetch funcionar.
+    // Ex.: GitHub Pages, IIS, Apache, Nginx, Live Server etc.
     // ============================================================
 
-    const API_BASE_URL =
-      "https://dadosabertos.almg.gov.br/api/v2/thesaurus";
-
-    const API_LIST_URL =
-      `${API_BASE_URL}/termos/lista`;
-
-    // Mantido aqui para referencia. A busca da pagina continua local,
-    // porque o snapshot diario ja fica carregado no navegador.
-    const API_SEARCH_URL =
-      `${API_BASE_URL}/termos/pesquisa`;
-
-    const API_TERM_URL = numero =>
-      `${API_BASE_URL}/termos/${encodeURIComponent(numero)}`;
-
-    // Horario local do navegador. Se a pagina estiver fechada as 3h,
-    // a atualizacao sera feita no primeiro acesso posterior a esse horario.
-    const DAILY_REFRESH_HOUR = 3;
-
-    // A ALMG recomenda intervalo minimo de um segundo entre requisicoes.
-    const API_MIN_INTERVAL_MS = 1100;
-
-    // O endpoint /termos/lista e paginado.
-    // p = pagina; tp = quantidade solicitada por pagina.
-    // A coleta NAO presume que o servidor respeite exatamente esse tamanho.
-    const API_PAGE_SIZE = 1000;
-    const API_MAX_PAGES = 2000;
-
-    // Referencia de integridade obtida do CSV atual do Thesaurus (11/08/2026).
-    // O endpoint /lista pode devolver apenas os descritores diretamente listados,
-    // enquanto os ancestrais estruturais aparecem nos caminhos de hierarquia.
-    // A validacao ocorre DEPOIS de reconstruir esses caminhos.
-    const MIN_EXPECTED_AUTHORIZED_TERMS = 4000;
-
-    const EXPECTED_TOP_BRANCHES = [
-      "Destinatários",
-      "Localidade Geográfica",
-      "Tema",
-      "Tempo"
-    ];
-
-    const CACHE_DB_NAME = "thesaurus_almg_cache";
-    const CACHE_DB_VERSION = 1;
-    const CACHE_STORE_NAME = "snapshots";
-    const CACHE_KEY = "thesaurus_atual";
-    const CACHE_SCHEMA_VERSION = 5;
+    const ICMG_TXT_URL = "dados/ICMG.txt";
 
     let state = {
       selectedId: null,
@@ -1086,13 +988,8 @@
     };
 
     let termById = new Map();
-    let termByName = new Map();
     let childrenByParent = new Map();
     let termPathCache = new Map();
-    let lastApiRequestFinishedAt = 0;
-    let refreshTimer = null;
-    let refreshInProgress = false;
-    let cacheSaveTimer = null;
 
     const treeEl = document.getElementById("tree");
     const termArea = document.getElementById("termArea");
@@ -1102,7 +999,6 @@
     const collapseBtn = document.getElementById("collapseBtn");
     const expandClassesBtn = document.getElementById("expandClassesBtn");
     const headerStatus = document.getElementById("headerStatus");
-    const refreshDataBtn = document.getElementById("refreshDataBtn");
     const splitter = document.getElementById("splitter");
 
     const LAYOUT_KEY = "consulta_thesaurus_left_width";
@@ -1153,13 +1049,6 @@
         renderTree();
       });
 
-      refreshDataBtn.addEventListener("click", () => {
-        atualizarDadosDaApi({
-          force: true,
-          reason: "manual"
-        });
-      });
-
       window.addEventListener("hashchange", () => {
         const id = decodeURIComponent(
           location.hash.replace(/^#/, "")
@@ -1190,6 +1079,7 @@
         openTerm(firstMatch.id);
       }
     }
+
     function setLeftWidth(px) {
       const min = 300;
 
@@ -1293,2430 +1183,84 @@
       });
     }
 
-    // ============================================================
-    // CARGA INICIAL, CACHE DIARIO E ATUALIZACAO MANUAL
-    // ============================================================
-
     async function loadState() {
-      let cached = null;
-
       try {
-        setStatus("Verificando cache local...");
-        cached = await readCache();
-      } catch (error) {
-        console.warn("Nao foi possivel ler o cache IndexedDB.", error);
-      }
+        setStatus("Carregando...");
 
-      const currentCycle = getRefreshCycleKey(new Date());
-      const cacheIsUsable =
-        cached &&
-        cached.schemaVersion === CACHE_SCHEMA_VERSION &&
-        Array.isArray(cached.terms) &&
-        cached.terms.length;
-
-      if (cacheIsUsable) {
-        applyTerms(cached.terms, {
-          updatedAt: cached.updatedAt,
-          source: "cache"
-        });
-      }
-
-      if (
-        cacheIsUsable &&
-        cached.cycleKey === currentCycle &&
-        cached.complete !== false
-      ) {
-        setReadyStatus(cached.updatedAt, "cache");
-      } else {
-        if (cacheIsUsable) {
-          setStatus(
-            "Dados em cache; verificando atualizacao diaria..."
-          );
-        }
-
-        await atualizarDadosDaApi({
-          force: true,
-          reason: cacheIsUsable ? "daily" : "initial",
-          keepExistingOnError: cacheIsUsable
-        });
-      }
-
-      scheduleNextDailyRefresh();
-    }
-
-    async function atualizarDadosDaApi({
-      force = false,
-      reason = "manual",
-      keepExistingOnError = true
-    } = {}) {
-      if (refreshInProgress) {
-        return;
-      }
-
-      refreshInProgress = true;
-      setRefreshButtonBusy(true);
-
-      const previousTerms = state.terms;
-      let previousSnapshot = null;
-
-      try {
-        previousSnapshot = await readCache().catch(() => null);
-
-        if (!force) {
-          const cycle = getRefreshCycleKey(new Date());
-
-          if (
-            previousSnapshot &&
-            previousSnapshot.schemaVersion === CACHE_SCHEMA_VERSION &&
-            previousSnapshot.cycleKey === cycle &&
-            previousSnapshot.complete === true &&
-            Array.isArray(previousSnapshot.terms) &&
-            previousSnapshot.terms.length
-          ) {
-            applyTerms(previousSnapshot.terms, {
-              updatedAt: previousSnapshot.updatedAt,
-              source: "cache",
-              stats: previousSnapshot.stats
-            });
-
-            setReadyStatus(
-              previousSnapshot.updatedAt,
-              "cache",
-              previousSnapshot.stats
-            );
-            return;
+        const response = await fetch(
+          `${ICMG_TXT_URL}?v=${Date.now()}`,
+          {
+            cache: "no-store"
           }
-        }
-
-        setStatus(
-          reason === "manual"
-            ? "Atualizando dados pela API..."
-            : "Buscando atualização diária na API..."
         );
 
-        const result = await carregarTodosOsTermosDaApi();
-        const adapted = adaptarListaDaApi(result.records);
-        const terms = adapted.terms;
-
-        const validation = validarEstruturaThesaurus(
-          terms,
-          previousSnapshot?.terms || previousTerms
-        );
-
-        if (!validation.ok) {
-          const detail = validation.errors.join(" | ");
-          const diagnostic =
-            `diagnóstico da coleta: ${adapted.stats.directAuthorizedRecords.toLocaleString("pt-BR")} ` +
-            `autorizado(s) direto(s), ${adapted.stats.hierarchyPathCount.toLocaleString("pt-BR")} ` +
-            `caminho(s) hierárquico(s), ${adapted.stats.recoveredHierarchyNodes.toLocaleString("pt-BR")} ` +
-            `nó(s) recuperado(s), ${result.stats.pagesFetched.toLocaleString("pt-BR")} página(s); ` +
-            `fim: ${result.stats.stopReason || "não informado"}`;
-
+        if (!response.ok) {
           throw new Error(
-            "A atualização foi recusada porque a resposta da API parece incompleta. " +
-            detail + " | " + diagnostic
+            `Não foi possível carregar ${ICMG_TXT_URL}. HTTP ${response.status}`
           );
         }
 
-        const now = new Date();
-        const stats = {
-          ...result.stats,
-          ...adapted.stats,
-          descriptors: validation.descriptors,
-          activeDescriptors: validation.activeDescriptors,
-          inactiveDescriptors: validation.inactiveDescriptors,
-          mappedRemissives: validation.mappedRemissives,
-          roots: validation.roots,
-          orphanCount: validation.orphanCount
-        };
+        const buffer = await response.arrayBuffer();
 
-        const snapshot = {
-          schemaVersion: CACHE_SCHEMA_VERSION,
-          cycleKey: getRefreshCycleKey(now),
-          updatedAt: now.toISOString(),
-          complete: true,
-          stats,
+        /*
+         * O TXT original do ICMG costuma estar em Windows-1252.
+         * Se o arquivo estiver em UTF-8, troque por "utf-8".
+         */
+        const text = new TextDecoder(
+          "windows-1252"
+        ).decode(buffer);
+
+        const terms =
+          montarTermosDaEstruturaIcmg(text);
+
+        state = {
+          selectedId: null,
+          expanded: [],
           terms
         };
 
-        // So substitui o cache depois de toda a validacao.
-        await writeCache(snapshot);
+        buildIndexes();
 
-        applyTerms(terms, {
-          updatedAt: snapshot.updatedAt,
-          source: "api",
-          stats
-        });
+        /*
+         * Inicia com as classes principais recolhidas.
+         */
+        state.expanded = [];
 
-        setReadyStatus(snapshot.updatedAt, "api", stats);
+        const hashId = decodeURIComponent(
+          location.hash.replace(/^#/, "")
+        );
+
+        if (hashId && getTerm(hashId)) {
+          state.selectedId = hashId;
+          expandAncestors(hashId);
+        } else {
+          state.selectedId =
+            firstSelectableTermId();
+        }
+
+        render();
+
+        setStatus(
+          `${state.terms.length.toLocaleString("pt-BR")} termo(s)`
+        );
       } catch (error) {
         console.error(error);
 
-        if (
-          keepExistingOnError &&
-          Array.isArray(previousTerms) &&
-          previousTerms.length
-        ) {
-          setStatus(
-            `Falha ao atualizar; mantendo o último cache válido. ${error.message}`
-          );
-        } else {
-          treeEl.innerHTML =
-            '<div class="empty">Nenhum termo carregado.</div>';
-
-          termArea.innerHTML = `
-            <div class="error">
-              <strong>Não foi possível carregar um snapshot válido do Thesaurus.</strong><br>
-              A página tentou consultar:<br>
-              <code>${escapeHtml(API_LIST_URL)}</code>
-              <br><br>
-              Detalhe técnico: ${escapeHtml(error.message)}
-              <br><br>
-              A página não grava respostas incompletas no cache. Atualmente, a
-              referência de integridade é de pelo menos
-              <strong>${MIN_EXPECTED_AUTHORIZED_TERMS.toLocaleString("pt-BR")}</strong>
-              descritores autorizados e uma hierarquia sem termos órfãos.
-              <br><br>
-              Se o navegador mencionar <strong>CORS</strong>, será necessário
-              publicar a página em origem autorizada ou utilizar um proxy/backend.
-            </div>
-          `;
-
-          setStatus("Erro ao carregar dados.");
-        }
-      } finally {
-        refreshInProgress = false;
-        setRefreshButtonBusy(false);
-      }
-    }
-
-    function applyTerms(terms, meta = {}) {
-      const previousSelectedId = state.selectedId;
-
-      state = {
-        selectedId: null,
-        expanded: [],
-        terms: Array.isArray(terms) ? terms : []
-      };
-
-      buildIndexes();
-
-      const hashId = decodeURIComponent(
-        location.hash.replace(/^#/, "")
-      );
-
-      if (hashId && getTerm(hashId)) {
-        state.selectedId = hashId;
-        expandAncestors(hashId);
-      } else if (
-        previousSelectedId &&
-        getTerm(previousSelectedId)
-      ) {
-        state.selectedId = previousSelectedId;
-        expandAncestors(previousSelectedId);
-      } else {
-        state.selectedId = firstSelectableTermId();
-      }
-
-      render();
-
-      const selected = getTerm(state.selectedId);
-      if (selected) {
-        carregarDetalhesSeNecessario(selected);
-      }
-    }
-
-    function setReadyStatus(updatedAt, source, stats = null) {
-      const descriptors = state.terms.length;
-      const inactive = state.terms.filter(term => term.ativo === false).length;
-
-      const unauthorized = new Set();
-      for (const term of state.terms) {
-        for (const up of term.relacionadosNaoAutorizados || []) {
-          const value = String(up || "").trim();
-          if (value) unauthorized.add(normalizeIcmgName(value));
-        }
-      }
-
-      const dateText = formatDateTime(updatedAt);
-      const suffix = source === "api" ? "API" : "cache";
-      const pageInfo = stats?.pagesFetched
-        ? ` | ${stats.pagesFetched.toLocaleString("pt-BR")} página(s) da API`
-        : "";
-
-      const reconstructionInfo = stats?.directAuthorizedRecords != null
-        ? ` | ${Number(stats.directAuthorizedRecords).toLocaleString("pt-BR")} direto(s)` +
-          (stats.recoveredHierarchyNodes
-            ? ` + ${Number(stats.recoveredHierarchyNodes).toLocaleString("pt-BR")} recuperado(s) da hierarquia`
-            : "")
-        : "";
-
-      setStatus(
-        `${descriptors.toLocaleString("pt-BR")} descritor(es)` +
-        ` | ${inactive.toLocaleString("pt-BR")} inativo(s)` +
-        (unauthorized.size
-          ? ` | ${unauthorized.size.toLocaleString("pt-BR")} remissiva(s) mapeada(s)`
-          : "") +
-        ` | atualizado em ${dateText} | ${suffix}` +
-        reconstructionInfo +
-        pageInfo
-      );
-    }
-
-    function setRefreshButtonBusy(isBusy) {
-      if (!refreshDataBtn) {
-        return;
-      }
-
-      refreshDataBtn.disabled = Boolean(isBusy);
-      refreshDataBtn.textContent = isBusy
-        ? "Atualizando..."
-        : "Atualizar dados";
-    }
-
-    function formatDateTime(value) {
-      if (!value) {
-        return "data desconhecida";
-      }
-
-      const date = new Date(value);
-
-      if (Number.isNaN(date.getTime())) {
-        return "data desconhecida";
-      }
-
-      return new Intl.DateTimeFormat("pt-BR", {
-        dateStyle: "short",
-        timeStyle: "short"
-      }).format(date);
-    }
-
-    function getRefreshCycleKey(date) {
-      const adjusted = new Date(date);
-
-      if (adjusted.getHours() < DAILY_REFRESH_HOUR) {
-        adjusted.setDate(adjusted.getDate() - 1);
-      }
-
-      const year = adjusted.getFullYear();
-      const month = String(adjusted.getMonth() + 1).padStart(2, "0");
-      const day = String(adjusted.getDate()).padStart(2, "0");
-
-      return `${year}-${month}-${day}`;
-    }
-
-    function nextDailyRefreshDate(fromDate = new Date()) {
-      const next = new Date(fromDate);
-      next.setHours(DAILY_REFRESH_HOUR, 0, 0, 0);
-
-      if (next <= fromDate) {
-        next.setDate(next.getDate() + 1);
-      }
-
-      return next;
-    }
-
-    function scheduleNextDailyRefresh() {
-      if (refreshTimer) {
-        clearTimeout(refreshTimer);
-      }
-
-      const now = new Date();
-      const next = nextDailyRefreshDate(now);
-      const delay = Math.max(1000, next.getTime() - now.getTime() + 5000);
-
-      refreshTimer = setTimeout(async () => {
-        await atualizarDadosDaApi({
-          force: true,
-          reason: "daily"
-        });
-
-        scheduleNextDailyRefresh();
-      }, delay);
-    }
-
-    // ============================================================
-    // INDEXEDDB
-    // ============================================================
-
-    function openCacheDb() {
-      return new Promise((resolve, reject) => {
-        if (!("indexedDB" in window)) {
-          reject(new Error("IndexedDB nao esta disponivel neste navegador."));
-          return;
-        }
-
-        const request = indexedDB.open(
-          CACHE_DB_NAME,
-          CACHE_DB_VERSION
-        );
-
-        request.onupgradeneeded = () => {
-          const db = request.result;
-
-          if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
-            db.createObjectStore(CACHE_STORE_NAME);
-          }
-        };
-
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-    }
-
-    async function readCache() {
-      const db = await openCacheDb();
-
-      try {
-        return await new Promise((resolve, reject) => {
-          const tx = db.transaction(CACHE_STORE_NAME, "readonly");
-          const store = tx.objectStore(CACHE_STORE_NAME);
-          const request = store.get(CACHE_KEY);
-
-          request.onsuccess = () => resolve(request.result || null);
-          request.onerror = () => reject(request.error);
-        });
-      } finally {
-        db.close();
-      }
-    }
-
-    async function writeCache(snapshot) {
-      const db = await openCacheDb();
-
-      try {
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction(CACHE_STORE_NAME, "readwrite");
-          const store = tx.objectStore(CACHE_STORE_NAME);
-
-          store.put(snapshot, CACHE_KEY);
-
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-          tx.onabort = () => reject(tx.error);
-        });
-      } finally {
-        db.close();
-      }
-    }
-
-    function scheduleCacheSave() {
-      if (cacheSaveTimer) {
-        clearTimeout(cacheSaveTimer);
-      }
-
-      cacheSaveTimer = setTimeout(async () => {
-        try {
-          const existing = await readCache();
-
-          await writeCache({
-            schemaVersion: CACHE_SCHEMA_VERSION,
-            cycleKey:
-              existing?.cycleKey || getRefreshCycleKey(new Date()),
-            updatedAt:
-              existing?.updatedAt || new Date().toISOString(),
-            complete: existing?.complete !== false,
-            stats: existing?.stats || null,
-            terms: state.terms
-          });
-        } catch (error) {
-          console.warn("Nao foi possivel atualizar o cache.", error);
-        }
-      }, 400);
-    }
-
-    // ============================================================
-    // CLIENTE DA API - XML PREFERENCIAL, JSON COMO FALLBACK
-    // ============================================================
-
-    async function waitApiInterval() {
-      const elapsed = Date.now() - lastApiRequestFinishedAt;
-
-      if (
-        lastApiRequestFinishedAt &&
-        elapsed < API_MIN_INTERVAL_MS
-      ) {
-        await sleep(API_MIN_INTERVAL_MS - elapsed);
-      }
-    }
-
-    async function apiFetchStructured(url) {
-      await waitApiInterval();
-
-      let response;
-
-      try {
-        response = await fetch(url, {
-          method: "GET",
-          headers: {
-            Accept: "application/xml, text/xml;q=0.9, application/json;q=0.8"
-          },
-          cache: "no-store"
-        });
-      } catch (error) {
-        throw new Error(
-          `Falha de rede ao consultar a API: ${error.message}`
-        );
-      }
-
-      let body = "";
-
-      try {
-        body = await response.text();
-      } finally {
-        lastApiRequestFinishedAt = Date.now();
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          `API retornou HTTP ${response.status} em ${url}`
-        );
-      }
-
-      const contentType = (
-        response.headers.get("content-type") || ""
-      ).toLowerCase();
-
-      const trimmed = body.trim();
-
-      if (
-        contentType.includes("json") ||
-        trimmed.startsWith("{") ||
-        trimmed.startsWith("[")
-      ) {
-        try {
-          return {
-            format: "json",
-            payload: JSON.parse(body),
-            rawText: body
-          };
-        } catch (error) {
-          throw new Error(
-            `A API informou JSON, mas a resposta não pôde ser interpretada: ${error.message}`
-          );
-        }
-      }
-
-      const parser = new DOMParser();
-      const xml = parser.parseFromString(body, "application/xml");
-      const parseError = xml.querySelector("parsererror");
-
-      if (parseError) {
-        throw new Error(
-          "A API não retornou XML válido. Início da resposta: " +
-          trimmed.slice(0, 180)
-        );
-      }
-
-      return {
-        format: "xml",
-        payload: xml,
-        rawText: body
-      };
-    }
-
-    async function apiFetchStructuredWithRetry(url, retries = 2) {
-      let lastError = null;
-
-      for (let attempt = 0; attempt <= retries; attempt += 1) {
-        try {
-          return await apiFetchStructured(url);
-        } catch (error) {
-          lastError = error;
-
-          if (/HTTP\s+(400|404)\b/.test(String(error.message || ""))) {
-            break;
-          }
-
-          if (attempt < retries) {
-            await sleep(API_MIN_INTERVAL_MS);
-          }
-        }
-      }
-
-      throw lastError || new Error("Falha desconhecida ao consultar a API.");
-    }
-
-    function sleep(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    function structuredTerms(response) {
-      if (response.format === "xml") {
-        return extractTermRecordsFromXml(response.payload);
-      }
-
-      return extractTermRecordsFromJson(response.payload);
-    }
-
-    function extractFirstStructuredTerm(response) {
-      const terms = structuredTerms(response);
-
-      if (terms.length) {
-        return terms[0];
-      }
-
-      // Alguns endpoints de detalhe em JSON devolvem diretamente o objeto,
-      // sem o campo "autorizado". Nesse caso tentamos normalizá-lo diretamente.
-      if (
-        response.format === "json" &&
-        response.payload &&
-        typeof response.payload === "object" &&
-        !Array.isArray(response.payload)
-      ) {
-        const direct = findLikelyDetailObject(response.payload);
-        if (direct) return direct;
-      }
-
-      throw new Error("Nenhum registro de termo foi reconhecido na resposta.");
-    }
-
-    function findLikelyDetailObject(payload) {
-      const visited = new Set();
-
-      function walk(value, depth = 0) {
-        if (
-          value == null ||
-          typeof value !== "object" ||
-          depth > 6 ||
-          visited.has(value)
-        ) {
-          return null;
-        }
-
-        visited.add(value);
-
-        if (!Array.isArray(value)) {
-          const numero = getField(value, [
-            "numero", "numdoc", "numeroDocumento", "numeroDoc",
-            "codigo", "cod", "controle", "id", "idTermo", "identificador"
-          ]);
-          const termo = getField(value, [
-            "termo", "nome", "descricao", "descritor", "nomeTermo"
-          ]);
-
-          if (numero !== undefined && termo !== undefined) {
-            return value;
-          }
-        }
-
-        for (const child of Object.values(value)) {
-          const found = walk(child, depth + 1);
-          if (found) return found;
-        }
-
-        return null;
-      }
-
-      return walk(payload);
-    }
-
-    async function carregarTodosOsTermosDaApi() {
-      const byKey = new Map();
-      const seenPageSignatures = new Set();
-      let pagina = 1;
-      let pagesFetched = 0;
-      let formatUsed = null;
-      let stopReason = "";
-
-      while (pagina <= API_MAX_PAGES) {
-        const url = new URL(API_LIST_URL);
-        url.searchParams.set("p", String(pagina));
-        url.searchParams.set("tp", String(API_PAGE_SIZE));
-
-        setStatus(
-          `Atualizando dados pela API... página ${pagina}` +
-          ` | ${byKey.size.toLocaleString("pt-BR")} registro(s) único(s)`
-        );
-
-        let response;
-
-        try {
-          response = await apiFetchStructured(url.toString());
-        } catch (error) {
-          if (
-            pagina > 1 &&
-            /HTTP\s+(400|404)\b/.test(String(error.message || ""))
-          ) {
-            stopReason = `HTTP de fim de paginação na página ${pagina}`;
-            break;
-          }
-
-          throw error;
-        }
-
-        pagesFetched += 1;
-        formatUsed = formatUsed || response.format;
-
-        const pageTerms = structuredTerms(response);
-
-        if (!pageTerms.length) {
-          stopReason = `página ${pagina} sem registros`;
-          break;
-        }
-
-        const pageKeys = pageTerms.map(recordIdentity).filter(Boolean);
-        const signature = pageKeys.join("|");
-
-        if (seenPageSignatures.has(signature)) {
-          stopReason = `a página ${pagina} repetiu uma página anterior`;
-          break;
-        }
-
-        seenPageSignatures.add(signature);
-
-        let newOnPage = 0;
-
-        for (const record of pageTerms) {
-          const key = recordIdentity(record);
-          if (!key) continue;
-
-          if (!byKey.has(key)) {
-            newOnPage += 1;
-          }
-
-          // Se o mesmo registro reaparecer, o último objeto prevalece.
-          byKey.set(key, record);
-        }
-
-        if (newOnPage === 0) {
-          stopReason = `página ${pagina} sem registros novos`;
-          break;
-        }
-
-        // IMPORTANTE: não encerramos por pageTerms.length < API_PAGE_SIZE.
-        // A API pode impor um limite próprio, inferior ao solicitado em tp.
-        pagina += 1;
-      }
-
-      if (pagina > API_MAX_PAGES) {
-        throw new Error(
-          `A paginação excedeu o limite de segurança de ${API_MAX_PAGES} páginas.`
-        );
-      }
-
-      const records = Array.from(byKey.values());
-
-      if (!records.length) {
-        throw new Error("A API respondeu, mas nenhum registro de termo foi reconhecido.");
-      }
-
-      console.info("Coleta do Thesaurus concluída", {
-        pagesFetched,
-        records: records.length,
-        formatUsed,
-        stopReason
-      });
-
-      return {
-        records,
-        stats: {
-          pagesFetched,
-          rawUniqueRecords: records.length,
-          formatUsed,
-          stopReason
-        }
-      };
-    }
-
-    function recordIdentity(raw) {
-      const numero = referenceNumber(
-        getField(raw, [
-          "numero", "numdoc", "numeroDocumento", "numeroDoc",
-          "codigo", "cod", "controle", "id", "idTermo", "identificador"
-        ])
-      );
-
-      if (numero) return `n:${numero}`;
-
-      const termo = referenceLabel(
-        getField(raw, [
-          "termo", "nome", "descricao", "descritor", "nomeTermo"
-        ])
-      );
-
-      return termo ? `t:${normalizeIcmgName(termo)}` : "";
-    }
-
-    // ---------------- XML ----------------
-
-    function xmlKey(node) {
-      return normalizeObjectKey(
-        node?.localName || node?.nodeName || ""
-      );
-    }
-
-    function xmlDirectElements(node) {
-      return Array.from(node?.children || []);
-    }
-
-    function xmlDirectChild(node, aliases) {
-      const wanted = new Set(aliases.map(normalizeObjectKey));
-      return xmlDirectElements(node).find(child =>
-        wanted.has(xmlKey(child))
-      ) || null;
-    }
-
-    function xmlFieldText(node, aliases) {
-      const child = xmlDirectChild(node, aliases);
-      return child ? String(child.textContent || "").trim() : "";
-    }
-
-    function xmlDescendantText(node, aliases) {
-      if (!node) return "";
-
-      const wanted = new Set(aliases.map(normalizeObjectKey));
-      const descendants = Array.from(
-        node.getElementsByTagName?.("*") || []
-      );
-
-      for (const child of descendants) {
-        if (wanted.has(xmlKey(child))) {
-          const value = String(child.textContent || "").trim();
-          if (value) return value;
-        }
-      }
-
-      return "";
-    }
-
-    function xmlBestText(node, aliases) {
-      return (
-        xmlFieldText(node, aliases) ||
-        xmlDescendantText(node, aliases)
-      );
-    }
-
-    function xmlReference(node) {
-      if (!node) return "";
-
-      const numero = xmlBestText(node, [
-        "numero", "numdoc", "numeroDocumento", "numeroDoc",
-        "codigo", "cod", "controle", "id", "idTermo", "identificador"
-      ]);
-      const termo = xmlBestText(node, [
-        "termo", "nome", "descricao", "descritor", "nomeTermo",
-        "label", "valor"
-      ]);
-
-      if (numero || termo) {
-        return {
-          numero: numero || null,
-          termo: termo || ""
-        };
-      }
-
-      const children = xmlDirectElements(node);
-
-      if (children.length === 1) {
-        return xmlReference(children[0]);
-      }
-
-      return String(node.textContent || "").trim();
-    }
-
-    function splitReferenceText(text) {
-      const value = String(text || "").trim();
-      if (!value) return [];
-
-      // A saída tabular do Thesaurus utiliza lista separada por vírgula.
-      // Preferimos ponto e vírgula quando houver; caso contrário, vírgula
-      // seguida de espaço. Elementos XML estruturados não passam por aqui.
-      const separator = value.includes(";") ? /\s*;\s*/ : /,\s+/;
-      return value.split(separator).map(item => item.trim()).filter(Boolean);
-    }
-
-    function xmlReferenceArray(field) {
-      if (!field) return [];
-
-      const children = xmlDirectElements(field);
-
-      if (!children.length) {
-        return splitReferenceText(field.textContent);
-      }
-
-      const refs = [];
-
-      function visit(node) {
-        const direct = xmlDirectElements(node);
-        const hasIdentity = Boolean(
-          xmlDirectChild(node, [
-            "numero", "numdoc", "numeroDocumento", "numeroDoc",
-            "codigo", "cod", "controle", "id", "idTermo", "identificador",
-            "termo", "nome", "descricao", "descritor", "nomeTermo",
-            "label", "valor"
-          ])
-        );
-
-        if (hasIdentity) {
-          const ref = xmlReference(node);
-          if (referenceLabel(ref) || referenceNumber(ref)) refs.push(ref);
-          return;
-        }
-
-        if (!direct.length) {
-          refs.push(...splitReferenceText(node.textContent));
-          return;
-        }
-
-        direct.forEach(visit);
-      }
-
-      children.forEach(visit);
-      return refs;
-    }
-
-    function xmlHierarchyPaths(node) {
-      const paths = [];
-      const candidates = Array.from(node?.getElementsByTagName?.("*") || []);
-
-      for (const candidate of candidates) {
-        const key = xmlKey(candidate);
-
-        if (
-          key === "hierarquia" ||
-          key === "caminho" ||
-          key === "path" ||
-          key === "ocorrenciahierarquia" ||
-          key === "ocorrenciashierarquias" ||
-          key === "hierarchypath" ||
-          key === "hierarchypaths"
-        ) {
-          const text = String(candidate.textContent || "").trim();
-
-          if (
-            text &&
-            text.length < 4000 &&
-            (
-              text.includes("/") ||
-              text.includes(" > ") ||
-              text.includes("→") ||
-              text.includes("|")
-            )
-          ) {
-            paths.push(text);
-          }
-        }
-      }
-
-      return Array.from(new Set(paths));
-    }
-
-    function xmlRecordToObject(node) {
-      const termoGeralNode = xmlDirectChild(node, [
-        "termoGeral", "termosGerais", "termoGenerico", "termoPai",
-        "termoSuperior", "pai", "ascendente", "broaderTerm", "tg"
-      ]);
-
-      const parentId = xmlBestText(node, [
-        "termoPaiId", "idTermoPai", "termoGeralId", "idTermoGeral",
-        "idPai", "paiId", "idAscendente", "ascendenteId"
-      ]);
-
-      let termoGeral = termoGeralNode
-        ? xmlReference(termoGeralNode)
-        : "";
-
-      if (parentId) {
-        const label = referenceLabel(termoGeral);
-        termoGeral = {
-          id: parentId,
-          numero: referenceNumber(termoGeral),
-          termo: label
-        };
-      }
-
-      const especificosNode = xmlDirectChild(node, [
-        "termosEspecificos", "termoEspecifico", "termosFilhos",
-        "filhos", "descendentes", "narrowerTerms", "te"
-      ]);
-
-      const relacionadosNode = xmlDirectChild(node, [
-        "termosRelacionados", "termoRelacionado", "relacionados",
-        "relatedTerms", "tr"
-      ]);
-
-      const naoAutorizadosNode = xmlDirectChild(node, [
-        "termosNaoAutorizados", "termoNaoAutorizado", "naoAutorizados",
-        "naoAutorizado", "usadoPor", "usadosPor", "useFor",
-        "sinonimos", "up"
-      ]);
-
-      const useNode = xmlDirectChild(node, [
-        "use", "usar", "termoPreferido", "descritorAutorizado",
-        "termoAutorizadoReferencia"
-      ]);
-
-      return {
-        numero: xmlBestText(node, [
-          "numero", "numdoc", "numeroDocumento", "numeroDoc",
-          "codigo", "cod", "controle", "id", "idTermo", "identificador"
-        ]),
-        termo: xmlBestText(node, [
-          "termo", "nome", "descricao", "descritor", "nomeTermo"
-        ]),
-        autorizado: xmlBestText(node, [
-          "autorizado", "termoAutorizado", "ehAutorizado"
-        ]),
-        ativo: xmlBestText(node, [
-          "ativo", "situacao", "status"
-        ]),
-        termoAnterior: xmlBestText(node, [
-          "termoAnterior", "nomeAnterior"
-        ]),
-        conceito: xmlBestText(node, ["conceito", "tq"]),
-        definicao: xmlBestText(node, ["definicao", "df"]),
-        notaExplicativa: xmlBestText(node, [
-          "notaExplicativa", "notaEscopo", "notaDeEscopo", "ne"
-        ]),
-        notaHistorica: xmlBestText(node, [
-          "notaHistorica", "notaUso", "notaDeUso", "nh"
-        ]),
-        classe: xmlBestText(node, ["classe", "categoria"]),
-        termoGeral,
-        termoGeralId: parentId || "",
-        termosEspecificos: xmlReferenceArray(especificosNode),
-        termosRelacionados: xmlReferenceArray(relacionadosNode),
-        termosNaoAutorizados: xmlReferenceArray(naoAutorizadosNode),
-        use: useNode ? xmlReference(useNode) : "",
-        hierarquia: xmlHierarchyPaths(node)
-      };
-    }
-
-    function extractTermRecordsFromXml(xml) {
-      const all = Array.from(xml.getElementsByTagName("*"));
-      const records = [];
-      const seen = new Set();
-
-      // A estrutura XML da API nem sempre deixa Numero e Termo como filhos
-      // diretos do mesmo elemento. O marcador confiavel do registro, usado
-      // inclusive no importador anterior da ALMG, e o filho direto
-      // <autorizado>. Depois de identificar esse elemento, procuramos Numero
-      // e Termo tanto diretamente quanto nos descendentes.
-      for (const node of all) {
-        const directAuthorized = xmlFieldText(node, [
-          "autorizado", "termoAutorizado", "ehAutorizado"
-        ]);
-
-        if (directAuthorized === "") {
-          continue;
-        }
-
-        const raw = xmlRecordToObject(node);
-
-        if (!String(raw.termo || "").trim()) {
-          continue;
-        }
-
-        const key = recordIdentity(raw);
-
-        if (key && !seen.has(key)) {
-          seen.add(key);
-          records.push(raw);
-        }
-      }
-
-      return records;
-    }
-
-    // ---------------- JSON ----------------
-
-    function extractTermRecordsFromJson(payload) {
-      const records = [];
-      const seenObjects = new Set();
-      const seenRecords = new Set();
-
-      function walk(value, depth = 0) {
-        if (
-          value == null ||
-          typeof value !== "object" ||
-          depth > 8 ||
-          seenObjects.has(value)
-        ) {
-          return;
-        }
-
-        seenObjects.add(value);
-
-        if (!Array.isArray(value)) {
-          const numero = getField(value, [
-            "numero", "numdoc", "numeroDocumento", "numeroDoc",
-            "codigo", "cod", "controle", "id", "idTermo", "identificador"
-          ]);
-          const termo = getField(value, [
-            "termo", "nome", "descricao", "descritor", "nomeTermo"
-          ]);
-          const autorizado = getField(value, [
-            "autorizado", "termoAutorizado", "ehAutorizado"
-          ]);
-
-          if (
-            numero !== undefined &&
-            termo !== undefined &&
-            autorizado !== undefined
-          ) {
-            const key = recordIdentity(value);
-            if (key && !seenRecords.has(key)) {
-              seenRecords.add(key);
-              records.push(value);
-            }
-          }
-        }
-
-        for (const child of Object.values(value)) {
-          walk(child, depth + 1);
-        }
-      }
-
-      walk(payload);
-      return records;
-    }
-
-    // ============================================================
-    // ADAPTADOR API -> MODELO INTERNO DA PAGINA
-    // ============================================================
-
-    function splitHierarchyPath(value) {
-      const text = String(value || "").trim();
-      if (!text) return [];
-
-      let parts;
-
-      if (text.includes("→")) {
-        parts = text.split(/\s*→\s*/);
-      } else if (text.includes(" > ")) {
-        parts = text.split(/\s*>\s*/);
-      } else if (text.includes("|")) {
-        parts = text.split(/\s*\|\s*/);
-      } else {
-        parts = text.split(/\s*\/\s*/);
-      }
-
-      return parts
-        .map(part => String(part || "").trim())
-        .filter(Boolean)
-        .map(part =>
-          normalizeIcmgName(part) === "tesauro"
-            ? "Thesaurus"
-            : part
-        );
-    }
-
-    function criarNoHierarquicoPlaceholder(name, hintedNumber = null) {
-      const termo = String(name || "").trim();
-      const number = referenceNumber(hintedNumber);
-
-      return {
-        id: number
-          ? `icmg-${number}`
-          : `hier-${slugIcmg(termo)}`,
-        numdoc: number || null,
-        parentId: null,
-        termo,
-        termoAnterior: "",
-        conceito: "",
-        definicao: "",
-        notaEscopo: "",
-        notaUso: "",
-        relacionados: [],
-        relacionadosNaoAutorizados: [],
-        ativo: null,
-        _detailsLoaded: false,
-        _detailLoading: false,
-        _syntheticClass: false,
-        _hierarchyOnly: true,
-        _hierarchyPaths: []
-      };
-    }
-
-    function adaptarListaDaApi(rawTerms) {
-      const provisional = rawTerms
-        .map(raw => normalizarRegistroApi(raw, false))
-        .filter(Boolean);
-
-      // /lista nao deve ser interpretado como a arvore completa. Na resposta
-      // atual, ele devolve os termos diretamente listados e, nos proprios
-      // registros, caminhos de hierarquia que podem conter ancestrais que nao
-      // aparecem como registros independentes. Reconstruimos esses ancestrais
-      // antes de validar o snapshot.
-      const authorizedSeeds = provisional.filter(term =>
-        term._authorized === true
-      );
-
-      const nonAuthorized = provisional.filter(term =>
-        term._authorized === false
-      );
-
-      const seedByName = new Map();
-      const duplicateNames = new Set();
-      const knownIdByName = new Map();
-      const idConflicts = new Set();
-      const pathLabelByName = new Map();
-      const parentNameByChildName = new Map();
-      const parentPathConflicts = new Set();
-      const pathNames = new Set();
-      let hierarchyPathCount = 0;
-
-      function canonicalLabel(value) {
-        let label = referenceLabel(value);
-
-        if (
-          !label &&
-          (typeof value === "string" || typeof value === "number")
-        ) {
-          label = String(value || "").trim();
-        }
-
-        if (!label) return "";
-
-        return normalizeIcmgName(label) === "tesauro"
-          ? "Thesaurus"
-          : label;
-      }
-
-      function registerKnownId(labelValue, refValue) {
-        const label = canonicalLabel(labelValue);
-        const number = referenceNumber(refValue);
-        const key = normalizeIcmgName(label);
-
-        if (!key || !number) return;
-
-        const current = knownIdByName.get(key);
-        if (current && current !== number) {
-          idConflicts.add(label);
-          return;
-        }
-
-        knownIdByName.set(key, number);
-      }
-
-      function registerReference(ref) {
-        if (ref == null || ref === "") return;
-
-        if (Array.isArray(ref)) {
-          ref.forEach(registerReference);
-          return;
-        }
-
-        // Uma referencia textual numerica pode ser o proprio nome do termo
-        // (por exemplo "2011"), e nao seu identificador. So inferimos
-        // nome -> id quando a API forneceu uma referencia estruturada.
-        if (typeof ref !== "object") return;
-
-        const label = canonicalLabel(ref);
-        if (label) registerKnownId(label, ref);
-      }
-
-      for (const seed of authorizedSeeds) {
-        const key = normalizeIcmgName(seed.termo);
-
-        if (seedByName.has(key)) {
-          duplicateNames.add(seed.termo);
-        } else {
-          seedByName.set(key, seed);
-        }
-
-        registerKnownId(seed.termo, seed.numdoc);
-        registerReference(seed._parentReference);
-        registerReference(seed._specificReferences);
-        registerReference(seed._relatedReferences);
-
-        for (const path of seed._hierarchyPaths || []) {
-          const parts = splitHierarchyPath(path);
-          if (!parts.length) continue;
-
-          hierarchyPathCount += 1;
-
-          for (const part of parts) {
-            const keyPart = normalizeIcmgName(part);
-            if (!keyPart) continue;
-            pathNames.add(keyPart);
-            if (!pathLabelByName.has(keyPart)) {
-              pathLabelByName.set(keyPart, part);
-            }
-          }
-
-          for (let i = 1; i < parts.length; i += 1) {
-            const parentLabel = parts[i - 1];
-            const childLabel = parts[i];
-            const childKey = normalizeIcmgName(childLabel);
-            const parentKeyName = normalizeIcmgName(parentLabel);
-
-            if (!childKey || !parentKeyName || childKey === parentKeyName) {
-              continue;
-            }
-
-            const existing = parentNameByChildName.get(childKey);
-
-            if (
-              existing &&
-              normalizeIcmgName(existing) !== parentKeyName
-            ) {
-              parentPathConflicts.add(childLabel);
-            } else if (!existing) {
-              parentNameByChildName.set(childKey, parentLabel);
-            }
-          }
-        }
-      }
-
-      // Quando a referencia TG traz apenas o identificador, o caminho da
-      // hierarquia fornece o nome do pai. Cruzamos as duas informacoes para
-      // preservar o id real do ancestral e permitir /{numdoc} sob demanda.
-      for (const seed of authorizedSeeds) {
-        const seedKey = normalizeIcmgName(seed.termo);
-        const parentFromPath = parentNameByChildName.get(seedKey);
-        const parentRefNumber = referenceNumber(seed._parentReference);
-        const parentRefLabel = canonicalLabel(seed._parentReference);
-
-        if (parentFromPath && parentRefNumber) {
-          registerKnownId(parentFromPath, parentRefNumber);
-        }
-
-        if (parentRefLabel && parentRefNumber) {
-          registerKnownId(parentRefLabel, parentRefNumber);
-        }
-      }
-
-      const allNames = new Map();
-
-      function registerNodeName(value) {
-        const label = canonicalLabel(value);
-        const key = normalizeIcmgName(label);
-        if (!key) return;
-
-        if (!allNames.has(key)) {
-          allNames.set(key, label);
-        }
-      }
-
-      for (const seed of authorizedSeeds) {
-        registerNodeName(seed.termo);
-
-        const parentLabel = canonicalLabel(seed._parentReference);
-        if (parentLabel) registerNodeName(parentLabel);
-      }
-
-      for (const [key, label] of pathLabelByName) {
-        if (!allNames.has(key)) allNames.set(key, label);
-      }
-
-      // Se os caminhos comecarem diretamente nos quatro ramos principais,
-      // o endpoint pode nao repetir o no estrutural "Thesaurus". Criamos
-      // apenas esse no-raiz conhecido, sem inventar outros ancestrais.
-      const topBranchKeys = EXPECTED_TOP_BRANCHES.map(normalizeIcmgName);
-      const hasAllTopBranches = topBranchKeys.every(key => allNames.has(key));
-      const thesaurusKey = normalizeIcmgName("Thesaurus");
-
-      if (!allNames.has(thesaurusKey) && hasAllTopBranches) {
-        allNames.set(thesaurusKey, "Thesaurus");
-      }
-
-      const terms = [];
-      const byName = new Map();
-      const byId = new Map();
-      let recoveredHierarchyNodes = 0;
-      let recoveredNodesWithReferencedId = 0;
-
-      for (const [nameKey, fallbackLabel] of allNames) {
-        const seed = seedByName.get(nameKey);
-        let term;
-
-        if (seed) {
-          term = seed;
-          term._hierarchyOnly = false;
-        } else {
-          const hintedNumber = knownIdByName.get(nameKey) || null;
-          term = criarNoHierarquicoPlaceholder(
-            fallbackLabel,
-            hintedNumber
-          );
-          recoveredHierarchyNodes += 1;
-          if (hintedNumber) recoveredNodesWithReferencedId += 1;
-        }
-
-        // Evita colisao de ids caso o servidor reutilize um identificador
-        // inesperadamente. O nome autorizado e unico no snapshot de referencia.
-        if (byId.has(String(term.id))) {
-          term.id = `hier-${slugIcmg(term.termo)}-${terms.length + 1}`;
-          if (term._hierarchyOnly) term.numdoc = null;
-        }
-
-        terms.push(term);
-        byName.set(nameKey, term);
-        byId.set(String(term.id), term);
-      }
-
-      function resolveAgainstAll(ref) {
-        if (ref == null || ref === "") return null;
-
-        const label = canonicalLabel(ref);
-        if (label) {
-          const foundByName = byName.get(normalizeIcmgName(label));
-          if (foundByName) return foundByName;
-        }
-
-        const number = referenceNumber(ref);
-        if (number) {
-          return byId.get(`icmg-${number}`) || null;
-        }
-
-        return null;
-      }
-
-      // 1) Caminhos da API definem a estrutura dos nos recuperados.
-      for (const term of terms) {
-        const parentLabel = parentNameByChildName.get(
-          normalizeIcmgName(term.termo)
-        );
-
-        if (!parentLabel) continue;
-
-        const parent = byName.get(normalizeIcmgName(parentLabel));
-        if (parent && parent.id !== term.id) {
-          term.parentId = parent.id;
-        }
-      }
-
-      // 2) TG explicito do registro tem prioridade sobre o caminho.
-      for (const seed of authorizedSeeds) {
-        const target = byName.get(normalizeIcmgName(seed.termo));
-        if (!target) continue;
-
-        const parent = resolveAgainstAll(seed._parentReference);
-
-        if (parent && parent.id !== target.id) {
-          target.parentId = parent.id;
-        } else {
-          const parentFromPath = parentNameByChildName.get(
-            normalizeIcmgName(target.termo)
-          );
-
-          if (parentFromPath) {
-            const pathParent = byName.get(
-              normalizeIcmgName(parentFromPath)
-            );
-            if (pathParent && pathParent.id !== target.id) {
-              target.parentId = pathParent.id;
-            }
-          }
-        }
-      }
-
-      // 3) TE e uma confirmacao/fallback. Nunca substitui TG ou caminho.
-      for (const seedParent of authorizedSeeds) {
-        const parent = byName.get(normalizeIcmgName(seedParent.termo));
-        if (!parent) continue;
-
-        for (const childRef of seedParent._specificReferences || []) {
-          const child = resolveAgainstAll(childRef);
-
-          if (
-            child &&
-            child.id !== parent.id &&
-            !child.parentId
-          ) {
-            child.parentId = parent.id;
-          }
-        }
-      }
-
-      // 4) Completa apenas a ligacao conhecida dos quatro ramos principais
-      // quando a API omitiu o registro-raiz dos resultados de /lista.
-      const root = byName.get(thesaurusKey);
-
-      if (root) {
-        root.parentId = null;
-
-        for (const branchName of EXPECTED_TOP_BRANCHES) {
-          const branch = byName.get(normalizeIcmgName(branchName));
-          if (branch && !branch.parentId) {
-            branch.parentId = root.id;
-          }
-        }
-      }
-
-      // Relacoes associativas dos registros diretamente devolvidos pela API.
-      for (const seed of authorizedSeeds) {
-        const target = byName.get(normalizeIcmgName(seed.termo));
-        if (!target) continue;
-
-        const relatedIds = [];
-
-        for (const ref of seed._relatedReferences || []) {
-          const related = resolveAgainstAll(ref);
-
-          if (
-            related &&
-            related.id !== target.id &&
-            !relatedIds.includes(related.id)
-          ) {
-            relatedIds.push(related.id);
-          }
-        }
-
-        target.relacionados = relatedIds;
-      }
-
-      // UP ja embutidos nos registros autorizados sao preservados; registros
-      // nao autorizados independentes tambem podem apontar via USE.
-      for (const up of nonAuthorized) {
-        const target = resolveAgainstAll(up._useReference);
-
-        if (
-          target &&
-          up.termo &&
-          !target.relacionadosNaoAutorizados.includes(up.termo)
-        ) {
-          target.relacionadosNaoAutorizados.push(up.termo);
-        }
-      }
-
-      for (const term of terms) {
-        if (seedByName.has(normalizeIcmgName(term.termo))) {
-          cleanupInternalApiFields(term);
-        }
-      }
-
-      return {
-        terms,
-        stats: {
-          directAuthorizedRecords: authorizedSeeds.length,
-          nonAuthorizedRecords: nonAuthorized.length,
-          hierarchyPathCount,
-          hierarchyNamesFound: pathNames.size,
-          recoveredHierarchyNodes,
-          recoveredNodesWithReferencedId,
-          hierarchyIdConflicts: idConflicts.size,
-          hierarchyParentConflicts: parentPathConflicts.size,
-          duplicateAuthorizedNames: duplicateNames.size
-        }
-      };
-    }
-
-    function validarEstruturaThesaurus(terms, previousTerms = []) {
-      const errors = [];
-      const warnings = [];
-      const byId = new Map();
-      const byName = new Map();
-      const duplicateIds = [];
-      const duplicateNames = [];
-
-      for (const term of terms) {
-        const id = String(term.id);
-        const name = normalizeIcmgName(term.termo);
-
-        if (byId.has(id)) duplicateIds.push(id);
-        else byId.set(id, term);
-
-        if (byName.has(name)) duplicateNames.push(term.termo);
-        else byName.set(name, term);
-      }
-
-      const descriptors = terms.length;
-      const activeDescriptors = terms.filter(term => term.ativo === true).length;
-      const inactiveDescriptors = terms.filter(term => term.ativo === false).length;
-
-      let previousDescriptorCount = 0;
-      if (Array.isArray(previousTerms) && previousTerms.length) {
-        previousDescriptorCount = previousTerms.length;
-      }
-
-      const minimumByPrevious = previousDescriptorCount
-        ? Math.floor(previousDescriptorCount * 0.9)
-        : 0;
-
-      const minimumAccepted = Math.max(
-        MIN_EXPECTED_AUTHORIZED_TERMS,
-        minimumByPrevious
-      );
-
-      if (descriptors < minimumAccepted) {
-        errors.push(
-          `foram reconhecidos ${descriptors.toLocaleString("pt-BR")} descritores; ` +
-          `o mínimo de segurança atual é ${minimumAccepted.toLocaleString("pt-BR")}`
-        );
-      }
-
-      if (duplicateIds.length) {
-        errors.push(`${duplicateIds.length} identificador(es) duplicado(s)`);
-      }
-
-      if (duplicateNames.length || terms._duplicateNames?.length) {
-        const count = Math.max(
-          duplicateNames.length,
-          terms._duplicateNames?.length || 0
-        );
-        errors.push(`${count} nome(s) de descritor duplicado(s)`);
-      }
-
-      const root = byName.get(normalizeIcmgName("Thesaurus"));
-
-      if (!root) {
-        errors.push('o descritor-raiz "Thesaurus" não foi localizado');
-      } else if (root.parentId) {
-        errors.push('o descritor-raiz "Thesaurus" apareceu com TermoGeral');
-      }
-
-      const roots = terms.filter(term => !term.parentId);
-
-      if (roots.length !== 1 || roots[0]?.id !== root?.id) {
-        errors.push(
-          `foram encontrados ${roots.length.toLocaleString("pt-BR")} nó(s) raiz; ` +
-          'o esperado é apenas "Thesaurus"'
-        );
-      }
-
-      if (root) {
-        for (const branchName of EXPECTED_TOP_BRANCHES) {
-          const branch = byName.get(normalizeIcmgName(branchName));
-
-          if (!branch) {
-            errors.push(`o ramo principal "${branchName}" não foi localizado`);
-          } else if (branch.parentId !== root.id) {
-            errors.push(`o ramo principal "${branchName}" não está subordinado a "Thesaurus"`);
-          }
-        }
-      }
-
-      const orphans = terms.filter(term =>
-        term.id !== root?.id &&
-        (!term.parentId || !byId.has(String(term.parentId)))
-      );
-
-      if (orphans.length) {
-        const sample = orphans.slice(0, 5).map(term => term.termo).join(", ");
-        errors.push(
-          `${orphans.length.toLocaleString("pt-BR")} descritor(es) ficaram órfãos` +
-          (sample ? ` (ex.: ${sample})` : "")
-        );
-      }
-
-      // Detecta ciclos no encadeamento TG.
-      let cycleCount = 0;
-
-      for (const term of terms) {
-        const path = new Set();
-        let current = term;
-
-        while (current) {
-          if (path.has(current.id)) {
-            cycleCount += 1;
-            break;
-          }
-
-          path.add(current.id);
-          current = current.parentId
-            ? byId.get(String(current.parentId)) || null
-            : null;
-        }
-      }
-
-      if (cycleCount) {
-        errors.push(`${cycleCount.toLocaleString("pt-BR")} ciclo(s) hierárquico(s) detectado(s)`);
-      }
-
-      const mappedRemissives = new Set();
-      for (const term of terms) {
-        for (const up of term.relacionadosNaoAutorizados || []) {
-          const key = normalizeIcmgName(up);
-          if (key) mappedRemissives.add(key);
-        }
-      }
-
-      if (!mappedRemissives.size) {
-        warnings.push(
-          "nenhuma remissiva UP foi mapeada na lista; elas poderão ser obtidas nos detalhes por numdoc"
-        );
-      }
-
-      if (warnings.length) {
-        console.warn("Avisos de validação do Thesaurus:", warnings);
-      }
-
-      return {
-        ok: errors.length === 0,
-        errors,
-        warnings,
-        descriptors,
-        activeDescriptors,
-        inactiveDescriptors,
-        mappedRemissives: mappedRemissives.size,
-        roots: roots.map(term => term.termo),
-        orphanCount: orphans.length
-      };
-    }
-
-    function normalizarRegistroApi(raw, fromDetail) {
-      if (!raw || typeof raw !== "object") {
-        return null;
-      }
-
-      const numeroValue = getField(raw, [
-        "numero",
-        "numdoc",
-        "numeroDocumento",
-        "numeroDoc",
-        "codigo",
-        "cod",
-        "controle",
-        "id",
-        "idTermo",
-        "identificador"
-      ]);
-
-      const termoValue = getField(raw, [
-        "termo",
-        "nome",
-        "descricao",
-        "descritor",
-        "nomeTermo"
-      ]);
-
-      const termo = referenceLabel(termoValue);
-
-      if (!termo) {
-        return null;
-      }
-
-      const numero = referenceNumber(numeroValue) ||
-        referenceNumber(raw) ||
-        null;
-
-      const autorizadoValue = getField(raw, [
-        "autorizado",
-        "termoAutorizado",
-        "ehAutorizado"
-      ]);
-
-      const ativoValue = getField(raw, [
-        "ativo",
-        "situacao",
-        "status"
-      ]);
-
-      const parentReferenceValue = getFieldDeep(raw, [
-        "termoGeral",
-        "termosGerais",
-        "termoGenerico",
-        "termosGenericos",
-        "termoPai",
-        "termoSuperior",
-        "pai",
-        "ascendente",
-        "broaderTerm",
-        "broaderTerms",
-        "tg"
-      ]);
-
-      const parentIdValue = getFieldDeep(raw, [
-        "termoPaiId",
-        "idTermoPai",
-        "termoGeralId",
-        "idTermoGeral",
-        "idPai",
-        "paiId",
-        "idAscendente",
-        "ascendenteId"
-      ]);
-
-      let parentReference = parentReferenceValue;
-
-      if (parentIdValue !== undefined && parentIdValue !== null && parentIdValue !== "") {
-        parentReference = {
-          numero: referenceNumber(parentIdValue) || String(parentIdValue).trim(),
-          termo: referenceLabel(parentReferenceValue)
-        };
-      }
-
-      const specificReferences = normalizeReferenceArray(
-        getFieldDeep(raw, [
-          "termosEspecificos",
-          "termoEspecifico",
-          "termosFilhos",
-          "filhos",
-          "descendentes",
-          "narrowerTerms",
-          "te"
-        ])
-      );
-
-      const relatedReferences = normalizeReferenceArray(
-        getFieldDeep(raw, [
-          "termosRelacionados",
-          "termoRelacionado",
-          "relacionados",
-          "relatedTerms",
-          "tr"
-        ])
-      );
-
-      const unauthorizedValues = normalizeReferenceArray(
-        getFieldDeep(raw, [
-          "termosNaoAutorizados",
-          "termoNaoAutorizado",
-          "naoAutorizados",
-          "naoAutorizado",
-          "usadoPor",
-          "usadosPor",
-          "useFor",
-          "sinonimos",
-          "up"
-        ])
-      )
-        .map(referenceLabel)
-        .filter(Boolean);
-
-      const useReference = getFieldDeep(raw, [
-        "use",
-        "usar",
-        "termoPreferido",
-        "descritorAutorizado",
-        "termoAutorizadoReferencia"
-      ]);
-
-      const hierarchyPaths = extractHierarchyPaths(raw);
-
-      const detailsLoaded = Boolean(fromDetail) || hasAnyField(raw, [
-        "definicao",
-        "notaExplicativa",
-        "notaHistorica",
-        "termosRelacionados",
-        "termosEspecificos",
-        "termosNaoAutorizados",
-        "naoAutorizados",
-        "usadoPor"
-      ]);
-
-      return {
-        id: numero != null
-          ? `icmg-${String(numero)}`
-          : `icmg-${slugIcmg(termo)}`,
-        numdoc: numero != null ? String(numero) : null,
-        parentId: null,
-        termo,
-        termoAnterior: textValue(
-          getField(raw, [
-            "termoAnterior",
-            "nomeAnterior"
-          ])
-        ),
-        conceito: textValue(
-          getField(raw, [
-            "conceito",
-            "tq"
-          ])
-        ),
-        definicao: textValue(
-          getField(raw, ["definicao", "df"])
-        ),
-        notaEscopo: textValue(
-          getField(raw, [
-            "notaExplicativa",
-            "notaEscopo",
-            "ne"
-          ])
-        ),
-        notaUso: textValue(
-          getField(raw, [
-            "notaHistorica",
-            "notaUso",
-            "nh"
-          ])
-        ),
-        relacionados: [],
-        relacionadosNaoAutorizados: Array.from(
-          new Set(unauthorizedValues)
-        ),
-        _authorized: parseYesNo(autorizadoValue, true),
-        ativo: parseActive(ativoValue),
-        _active: parseActive(ativoValue),
-        _classe: textValue(
-          getField(raw, ["classe", "categoria"])
-        ),
-        _parentReference: parentReference,
-        _specificReferences: specificReferences,
-        _relatedReferences: relatedReferences,
-        _useReference: useReference,
-        _hierarchyPaths: hierarchyPaths,
-        _detailsLoaded: detailsLoaded,
-        _detailLoading: false,
-        _syntheticClass: false
-      };
-    }
-
-    function cleanupInternalApiFields(term) {
-      delete term._authorized;
-      delete term._active;
-      delete term._classe;
-      delete term._parentReference;
-      delete term._specificReferences;
-      delete term._relatedReferences;
-      delete term._useReference;
-      // _hierarchyPaths e mantido temporariamente ate a montagem final da arvore.
-    }
-
-    function getFieldDeep(obj, aliases, maxDepth = 4) {
-      const direct = getField(obj, aliases);
-      if (direct !== undefined) return direct;
-
-      const wanted = new Set(aliases.map(normalizeObjectKey));
-      const visited = new Set();
-
-      function walk(value, depth) {
-        if (
-          value == null ||
-          typeof value !== "object" ||
-          depth > maxDepth ||
-          visited.has(value)
-        ) {
-          return undefined;
-        }
-
-        visited.add(value);
-
-        if (Array.isArray(value)) {
-          for (const item of value) {
-            const found = walk(item, depth + 1);
-            if (found !== undefined) return found;
-          }
-          return undefined;
-        }
-
-        for (const [key, child] of Object.entries(value)) {
-          if (wanted.has(normalizeObjectKey(key))) {
-            return child;
-          }
-        }
-
-        for (const child of Object.values(value)) {
-          const found = walk(child, depth + 1);
-          if (found !== undefined) return found;
-        }
-
-        return undefined;
-      }
-
-      return walk(obj, 0);
-    }
-
-    function extractHierarchyPaths(raw) {
-      const results = [];
-      const visited = new Set();
-
-      function isHierarchyKey(key) {
-        const normalized = normalizeObjectKey(key);
-        return (
-          normalized.includes("hierarquia") ||
-          normalized.includes("caminho") ||
-          normalized === "path" ||
-          normalized === "paths"
-        );
-      }
-
-      function addPath(value) {
-        const text = String(value || "").trim();
-        if (!text) return;
-
-        if (
-          text.includes("/") ||
-          text.includes(" > ") ||
-          text.includes("→") ||
-          text.includes("|")
-        ) {
-          results.push(text);
-        }
-      }
-
-      function labelsFromArray(items) {
-        const strings = items
-          .filter(item => typeof item === "string")
-          .map(item => String(item || "").trim())
-          .filter(Boolean);
-
-        const completePaths = strings.filter(item =>
-          item.includes("/") ||
-          item.includes(" > ") ||
-          item.includes("→") ||
-          item.includes("|")
-        );
-
-        if (completePaths.length) {
-          completePaths.forEach(addPath);
-          return true;
-        }
-
-        const labels = items
-          .map(item => referenceLabel(item))
-          .map(item => String(item || "").trim())
-          .filter(Boolean);
-
-        if (labels.length > 1) {
-          results.push(labels.join(" / "));
-          return true;
-        }
-
-        return false;
-      }
-
-      function walk(value, key = "", depth = 0) {
-        if (
-          value == null ||
-          depth > 5 ||
-          (typeof value === "object" && visited.has(value))
-        ) {
-          return;
-        }
-
-        if (typeof value === "string") {
-          if (isHierarchyKey(key)) addPath(value);
-          return;
-        }
-
-        if (typeof value !== "object") return;
-        visited.add(value);
-
-        if (Array.isArray(value)) {
-          if (isHierarchyKey(key) && labelsFromArray(value)) return;
-          value.forEach(item => walk(item, key, depth + 1));
-          return;
-        }
-
-        for (const [childKey, child] of Object.entries(value)) {
-          if (isHierarchyKey(childKey)) {
-            if (typeof child === "string") {
-              addPath(child);
-            } else if (Array.isArray(child)) {
-              if (!labelsFromArray(child)) {
-                child.forEach(item => walk(item, childKey, depth + 1));
-              }
-            } else {
-              walk(child, childKey, depth + 1);
-            }
-          } else {
-            walk(child, childKey, depth + 1);
-          }
-        }
-      }
-
-      walk(raw);
-      return Array.from(new Set(results));
-    }
-
-    function getField(obj, aliases) {
-      if (!obj || typeof obj !== "object") {
-        return undefined;
-      }
-
-      const index = new Map(
-        Object.keys(obj).map(key => [
-          normalizeObjectKey(key),
-          key
-        ])
-      );
-
-      for (const alias of aliases) {
-        const realKey = index.get(
-          normalizeObjectKey(alias)
-        );
-
-        if (realKey !== undefined) {
-          return obj[realKey];
-        }
-      }
-
-      return undefined;
-    }
-
-    function hasAnyField(obj, aliases) {
-      if (!obj || typeof obj !== "object") {
-        return false;
-      }
-
-      const keys = new Set(
-        Object.keys(obj).map(normalizeObjectKey)
-      );
-
-      return aliases.some(alias =>
-        keys.has(normalizeObjectKey(alias))
-      );
-    }
-
-    function normalizeObjectKey(value) {
-      return String(value || "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9]/g, "")
-        .toLowerCase();
-    }
-
-    function textValue(value) {
-      if (value == null) {
-        return "";
-      }
-
-      if (
-        typeof value === "string" ||
-        typeof value === "number" ||
-        typeof value === "boolean"
-      ) {
-        return String(value).trim();
-      }
-
-      if (Array.isArray(value)) {
-        return value
-          .map(textValue)
-          .filter(Boolean)
-          .join("\n\n");
-      }
-
-      if (typeof value === "object") {
-        return referenceLabel(value);
-      }
-
-      return "";
-    }
-
-    function normalizeReferenceArray(value) {
-      if (value == null || value === "") {
-        return [];
-      }
-
-      if (Array.isArray(value)) {
-        return value;
-      }
-
-      if (typeof value === "object") {
-        for (const key of [
-          "termos",
-          "itens",
-          "items",
-          "lista",
-          "content",
-          "dados"
-        ]) {
-          const nested = getField(value, [key]);
-          if (Array.isArray(nested)) {
-            return nested;
-          }
-        }
-      }
-
-      if (typeof value === "string" && value.includes(";")) {
-        return value
-          .split(";")
-          .map(item => item.trim())
-          .filter(Boolean);
-      }
-
-      return [value];
-    }
-
-    function referenceNumber(value) {
-      if (value == null) {
-        return null;
-      }
-
-      if (
-        typeof value === "number" ||
-        (typeof value === "string" && /^\d+$/.test(value.trim()))
-      ) {
-        return String(value).trim();
-      }
-
-      if (typeof value === "object") {
-        const nested = getField(value, [
-          "numero",
-          "numdoc",
-          "numeroDocumento",
-          "numeroDoc",
-          "codigo",
-          "cod",
-          "controle",
-          "id",
-          "idTermo",
-          "identificador",
-          "termoId"
-        ]);
-
-        if (nested !== undefined && nested !== value) {
-          return referenceNumber(nested);
-        }
-      }
-
-      return null;
-    }
-
-    function referenceLabel(value) {
-      if (value == null) {
-        return "";
-      }
-
-      if (
-        typeof value === "string" ||
-        typeof value === "number"
-      ) {
-        return String(value).trim();
-      }
-
-      if (typeof value === "object") {
-        const nested = getField(value, [
-          "termo",
-          "nome",
-          "descricao",
-          "descritor",
-          "nomeTermo",
-          "descricaoTermo",
-          "valor",
-          "label"
-        ]);
-
-        if (nested !== undefined && nested !== value) {
-          return referenceLabel(nested);
-        }
-      }
-
-      return "";
-    }
-
-    function parseYesNo(value, defaultValue = true) {
-      if (value == null || value === "") {
-        return defaultValue;
-      }
-
-      if (typeof value === "boolean") {
-        return value;
-      }
-
-      const normalized = normalizeIcmgName(value);
-
-      if (["sim", "s", "true", "1", "autorizado"].includes(normalized)) {
-        return true;
-      }
-
-      if (["nao", "n", "false", "0", "nao autorizado"].includes(normalized)) {
-        return false;
-      }
-
-      return defaultValue;
-    }
-
-    function parseActive(value) {
-      if (value == null || value === "") {
-        return null;
-      }
-
-      const normalized = normalizeIcmgName(value);
-
-      if (["sim", "s", "true", "1", "ativo", "ativa"].includes(normalized)) {
-        return true;
-      }
-
-      if (["nao", "n", "false", "0", "inativo", "inativa"].includes(normalized)) {
-        return false;
-      }
-
-      return null;
-    }
-
-    function resolveReferenceToTerm(ref, byId, byName) {
-      if (ref == null || ref === "") {
-        return null;
-      }
-
-      if (Array.isArray(ref)) {
-        for (const item of ref) {
-          const resolved = resolveReferenceToTerm(item, byId, byName);
-          if (resolved) return resolved;
-        }
-        return null;
-      }
-
-      const number = referenceNumber(ref);
-
-      if (number != null) {
-        const byNumber = byId.get(`icmg-${number}`);
-        if (byNumber) {
-          return byNumber;
-        }
-      }
-
-      const label = referenceLabel(ref);
-
-      if (label) {
-        return byName.get(normalizeIcmgName(label)) || null;
-      }
-
-      return null;
-    }
-
-    // ============================================================
-    // DETALHE POR NUMDOC - SOB DEMANDA E COM CACHE
-    // ============================================================
-
-    async function carregarDetalhesSeNecessario(term) {
-      if (
-        !term ||
-        term._detailsLoaded ||
-        term._detailLoading ||
-        !term.numdoc
-      ) {
-        return;
-      }
-
-      term._detailLoading = true;
-
-      if (state.selectedId === term.id) {
-        setStatus(
-          `${state.terms.length.toLocaleString("pt-BR")} descritor(es) | carregando detalhes...`
-        );
-      }
-
-      try {
-        const response = await apiFetchStructuredWithRetry(
-          API_TERM_URL(term.numdoc),
-          2
-        );
-
-        const raw = extractFirstStructuredTerm(response);
-        const detail = normalizarRegistroApi(raw, true);
-
-        if (!detail) {
-          throw new Error("Detalhe do termo nao reconhecido.");
-        }
-
-        mergeTermDetail(term, detail);
-        term._detailsLoaded = true;
-        scheduleCacheSave();
-
-        if (state.selectedId === term.id) {
-          renderTermArea();
-
-          const cached = await readCache().catch(() => null);
-          setReadyStatus(
-            cached?.updatedAt || new Date().toISOString(),
-            "cache"
-          );
-        }
-      } catch (error) {
-        console.warn(
-          `Nao foi possivel carregar detalhes de ${term.termo}.`,
-          error
-        );
-
-        term._detailsLoaded = false;
-
-        if (state.selectedId === term.id) {
-          setStatus(
-            `${state.terms.length.toLocaleString("pt-BR")} descritor(es) | detalhe indisponível`
-          );
-        }
-      } finally {
-        term._detailLoading = false;
-      }
-    }
-
-    function buildResolutionMaps(terms) {
-      const byId = new Map();
-      const byName = new Map();
-
-      for (const term of terms) {
-        byId.set(String(term.id), term);
-        const key = normalizeIcmgName(term.termo);
-        if (key && !byName.has(key)) byName.set(key, term);
-      }
-
-      return { byId, byName };
-    }
-
-    function mergeTermDetail(
-      target,
-      detail,
-      {
-        byId = termById,
-        byName = termByName,
-        rebuild = true
-      } = {}
-    ) {
-      target.termo = detail.termo || target.termo;
-      target.numdoc = detail.numdoc || target.numdoc || null;
-      target._hierarchyOnly = false;
-      target.termoAnterior =
-        detail.termoAnterior || target.termoAnterior || "";
-      target.conceito = detail.conceito || target.conceito || "";
-      target.definicao = detail.definicao || target.definicao || "";
-      target.notaEscopo = detail.notaEscopo || target.notaEscopo || "";
-      target.notaUso = detail.notaUso || target.notaUso || "";
-      if (detail.ativo !== null && detail.ativo !== undefined) {
-        target.ativo = detail.ativo;
-      }
-
-      if (detail.relacionadosNaoAutorizados.length) {
-        target.relacionadosNaoAutorizados = Array.from(
-          new Set([
-            ...(target.relacionadosNaoAutorizados || []),
-            ...detail.relacionadosNaoAutorizados
-          ])
-        );
-      }
-
-      const parent = resolveReferenceToTerm(
-        detail._parentReference,
-        byId,
-        byName
-      );
-
-      if (parent && parent.id !== target.id) {
-        target.parentId = parent.id;
-      }
-
-      const relatedIds = [];
-
-      for (const ref of detail._relatedReferences || []) {
-        const related = resolveReferenceToTerm(
-          ref,
-          byId,
-          byName
-        );
-
-        if (
-          related &&
-          related.id !== target.id &&
-          !relatedIds.includes(related.id)
-        ) {
-          relatedIds.push(related.id);
-        }
-      }
-
-      if (relatedIds.length) {
-        target.relacionados = relatedIds;
-      }
-
-      // TE tambem ajuda a reconstruir a hierarquia quando o detalhe do
-      // proprio filho nao explicita TG.
-      for (const ref of detail._specificReferences || []) {
-        const child = resolveReferenceToTerm(ref, byId, byName);
-
-        if (
-          child &&
-          child.id !== target.id &&
-          !child.parentId
-        ) {
-          child.parentId = target.id;
-        }
-      }
-
-      target._hierarchyPaths = Array.from(
-        new Set([
-          ...(target._hierarchyPaths || []),
-          ...(detail._hierarchyPaths || [])
-        ])
-      );
-
-      target._detailsLoaded = true;
-
-      if (rebuild) {
-        buildIndexes();
+        treeEl.innerHTML =
+          '<div class="empty">Nenhum termo carregado.</div>';
+
+        termArea.innerHTML = `
+          <div class="error">
+            <strong>Não foi possível carregar o arquivo do thesaurus.</strong><br>
+            Verifique se o arquivo
+            <code>${escapeHtml(ICMG_TXT_URL)}</code>
+            existe e se a página está sendo aberta por um servidor web.
+            <br><br>
+            Detalhe técnico: ${escapeHtml(error.message)}
+          </div>
+        `;
+
+        setStatus("Erro ao carregar dados.");
       }
     }
 
@@ -3732,7 +1276,6 @@
 
     function buildIndexes() {
       termById = new Map();
-      termByName = new Map();
       childrenByParent = new Map();
       termPathCache = new Map();
 
@@ -3741,11 +1284,6 @@
           String(term.id),
           term
         );
-
-        const nameKey = normalizeIcmgName(term.termo);
-        if (nameKey && !termByName.has(nameKey)) {
-          termByName.set(nameKey, term);
-        }
 
         const key = parentKey(term.parentId);
 
@@ -3787,25 +1325,20 @@
       );
     }
 
-    function visibleRootTerms() {
-      const thesaurusRoot = termByName.get(
-        normalizeIcmgName("Thesaurus")
-      );
-
-      if (thesaurusRoot) {
-        return childrenOf(thesaurusRoot.id);
-      }
-
-      return childrenOf(null);
-    }
-
     function rootTermIds() {
-      return visibleRootTerms().map(term => term.id);
+      return childrenOf(null).map(
+        term => term.id
+      );
     }
 
     function firstSelectableTermId() {
-      const roots = visibleRootTerms();
-      return roots.length ? roots[0].id : null;
+      const roots = childrenOf(null);
+
+      if (!roots.length) {
+        return null;
+      }
+
+      return roots[0].id;
     }
 
     function displayTermName(term) {
@@ -3843,11 +1376,7 @@
         !guard.has(current.id)
       ) {
         guard.add(current.id);
-
-        if (normalizeIcmgName(current.termo) !== "thesaurus") {
-          parts.push(displayTermName(current));
-        }
-
+        parts.push(displayTermName(current));
         current = getTerm(current.parentId);
       }
 
@@ -3885,8 +1414,6 @@
           `#${encodeURIComponent(term.id)}`
         );
       }
-
-      carregarDetalhesSeNecessario(term);
     }
 
     function expandAncestors(termId) {
@@ -3928,7 +1455,7 @@
 
       treeEl.innerHTML = "";
 
-      const roots = visibleRootTerms();
+      const roots = childrenOf(null);
 
       if (!roots.length) {
         treeEl.innerHTML =
@@ -4438,6 +1965,14 @@
         .toLowerCase();
     }
 
+    function normalizeIcmgKey(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toUpperCase();
+    }
+
     function normalizeIcmgName(value) {
       return String(value || "")
         .normalize("NFD")
@@ -4473,6 +2008,409 @@
         normalizeIcmgName(termo)
       );
     }
+
+    function firstField(record, key) {
+      const values =
+        record.fields[key] || [];
+
+      return String(
+        values[0] || ""
+      ).trim();
+    }
+
+    function allFields(record, key) {
+      return (
+        record.fields[key] || []
+      )
+        .map(value =>
+          String(value || "").trim()
+        )
+        .filter(Boolean);
+    }
+
+    function parseIcmgTxt(text) {
+      const lines = String(text || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .split("\n");
+
+      const records = [];
+      let current = null;
+      let currentKey = null;
+
+      function startRecord(kind, value) {
+        if (current) {
+          records.push(current);
+        }
+
+        current = {
+          kind,
+          fields: {}
+        };
+
+        currentKey = kind;
+
+        current.fields[currentKey] = [
+          String(value || "").trim()
+        ];
+      }
+
+      function addField(key, value) {
+        if (!current) {
+          return;
+        }
+
+        currentKey = key;
+
+        if (!current.fields[currentKey]) {
+          current.fields[currentKey] = [];
+        }
+
+        current.fields[currentKey].push(
+          String(value || "").trim()
+        );
+      }
+
+      function appendToCurrentField(value) {
+        if (
+          !current ||
+          !currentKey
+        ) {
+          return;
+        }
+
+        const values =
+          current.fields[currentKey];
+
+        if (
+          !values ||
+          !values.length
+        ) {
+          return;
+        }
+
+        const lastIndex =
+          values.length - 1;
+
+        const line = String(
+          value || ""
+        ).trimEnd();
+
+        if (!line.trim()) {
+          values[lastIndex] += "\n";
+        } else if (values[lastIndex]) {
+          values[lastIndex] +=
+            "\n" + line;
+        } else {
+          values[lastIndex] = line;
+        }
+      }
+
+      for (const rawLine of lines) {
+        const line = rawLine.trimEnd();
+
+        const match = line.match(
+          /^\.\.([^:]+?)\.?:\s*(.*)$/
+        );
+
+        if (match) {
+          const key =
+            normalizeIcmgKey(match[1]);
+
+          const value =
+            match[2] || "";
+
+          if (
+            key === "TERMO" ||
+            key === "NAO AUTORIZADO"
+          ) {
+            startRecord(key, value);
+          } else {
+            addField(key, value);
+          }
+        } else {
+          appendToCurrentField(line);
+        }
+      }
+
+      if (current) {
+        records.push(current);
+      }
+
+      return records;
+    }
+
+    function termoFromIcmgRecord(record) {
+      const termo =
+        firstField(record, "TERMO");
+
+      const tq =
+        firstField(record, "TQ");
+
+      const controle =
+        firstField(record, "CONTROLE");
+
+      const classe =
+        firstField(record, "CLASSE") ||
+        "Sem classe";
+
+      const tg =
+        firstField(record, "TG");
+
+      const definicao =
+        firstField(record, "DF");
+
+      /*
+       * NE = Nota Explicativa.
+       */
+      const notaExplicativa =
+        allFields(record, "NE")
+          .join("\n\n");
+
+      /*
+       * NH = Nota Histórica.
+       */
+      const notaHistorica =
+        allFields(record, "NH")
+          .join("\n\n");
+
+      /*
+       * UP = Usado por / sinônimos não autorizados.
+       */
+      const usadosPor =
+        allFields(record, "UP");
+
+      const id = controle
+        ? `icmg-${controle}`
+        : `icmg-${slugIcmg(termo)}`;
+
+      return {
+        id,
+        parentId: null,
+        termo,
+        termoAnterior: "",
+        conceito: tq || "",
+        definicao,
+        notaEscopo: notaExplicativa,
+        notaUso: notaHistorica,
+        relacionados: [],
+        relacionadosNaoAutorizados: usadosPor,
+        _classe: classe,
+        _tg: tg,
+        _tr: allFields(record, "TR")
+      };
+    }
+
+    function montarTermosDaEstruturaIcmg(
+      text
+    ) {
+      const records =
+        parseIcmgTxt(text);
+
+      const authorizedRecords =
+        records.filter(record => {
+          if (
+            record.kind !== "TERMO"
+          ) {
+            return false;
+          }
+
+          const termo =
+            firstField(
+              record,
+              "TERMO"
+            );
+
+          if (!termo) {
+            return false;
+          }
+
+          const classe =
+            firstField(
+              record,
+              "CLASSE"
+            ) || "Sem classe";
+
+          /*
+           * Descarta termos estruturais que
+           * não devem aparecer na árvore.
+           */
+          if (
+            isTermoIcmgDescartado(termo)
+          ) {
+            return false;
+          }
+
+          /*
+           * Descarta classes que não devem
+           * aparecer como raiz nem como termo.
+           */
+          if (
+            isClasseIcmgDescartada(classe)
+          ) {
+            return false;
+          }
+
+          /*
+           * Evita importar o próprio nome
+           * da classe como termo filho.
+           */
+          if (
+            normalizeIcmgName(termo) ===
+            normalizeIcmgName(classe)
+          ) {
+            return false;
+          }
+
+          return true;
+        });
+
+      const terms =
+        authorizedRecords.map(
+          termoFromIcmgRecord
+        );
+
+      const byName = new Map();
+      const byTq = new Map();
+
+      for (const term of terms) {
+        byName.set(
+          normalizeIcmgName(term.termo),
+          term.id
+        );
+
+        if (term.conceito) {
+          byTq.set(
+            normalizeIcmgName(
+              term.conceito
+            ),
+            term.id
+          );
+        }
+      }
+
+      const classes = Array.from(
+        new Set(
+          terms
+            .map(
+              term =>
+                term._classe ||
+                "Sem classe"
+            )
+            .filter(classe =>
+              classe &&
+              !isClasseIcmgSemRaiz(classe) &&
+              !isClasseIcmgDescartada(classe)
+            )
+        )
+      ).sort((a, b) =>
+        a.localeCompare(
+          b,
+          "pt-BR"
+        )
+      );
+
+      const classTerms =
+        classes.map(classe => ({
+          id: `classe-${slugIcmg(classe)}`,
+          parentId: null,
+          termo: classe,
+          termoAnterior: "",
+          conceito: "",
+          definicao:
+            "Classe geral importada do documento ICMG.",
+          notaEscopo: "",
+          notaUso: "",
+          relacionados: [],
+          relacionadosNaoAutorizados: []
+        }));
+
+      const classIdByName =
+        new Map(
+          classTerms.map(term => [
+            normalizeIcmgName(term.termo),
+            term.id
+          ])
+        );
+
+      for (const term of terms) {
+        const tg =
+          term._tg || "";
+
+        const classe =
+          term._classe ||
+          "Sem classe";
+
+        const tgNorm =
+          normalizeIcmgName(tg);
+
+        const classeNorm =
+          normalizeIcmgName(classe);
+
+        const classId =
+          classIdByName.get(
+            classeNorm
+          ) || null;
+
+        if (!tg) {
+          term.parentId = classId;
+        } else if (
+          tgNorm === classeNorm
+        ) {
+          term.parentId = classId;
+        } else if (
+          byName.has(tgNorm)
+        ) {
+          term.parentId =
+            byName.get(tgNorm);
+        } else if (
+          byTq.has(tgNorm)
+        ) {
+          term.parentId =
+            byTq.get(tgNorm);
+        } else {
+          term.parentId = classId;
+        }
+
+        const relatedIds = [];
+
+        for (
+          const relatedName of
+          term._tr || []
+        ) {
+          const relatedNorm =
+            normalizeIcmgName(
+              relatedName
+            );
+
+          const relatedId =
+            byName.get(relatedNorm) ||
+            byTq.get(relatedNorm);
+
+          if (
+            relatedId &&
+            relatedId !== term.id &&
+            !relatedIds.includes(
+              relatedId
+            )
+          ) {
+            relatedIds.push(
+              relatedId
+            );
+          }
+        }
+
+        term.relacionados =
+          relatedIds;
+
+        delete term._classe;
+        delete term._tg;
+        delete term._tr;
+      }
+
+      return classTerms.concat(terms);
+    }
+
     function escapeHtml(value) {
       return String(value ?? "")
         .replaceAll("&", "&amp;")
