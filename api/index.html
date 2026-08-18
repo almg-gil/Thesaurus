@@ -1,0 +1,4490 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Thesaurus ALMG</title>
+  <link rel="icon" type="image/png" href="assets/favicom-almg.png">
+
+  <style>
+    :root {
+      --border: #d8d8d8;
+      --muted: #666;
+      --soft: #f4f3ef;
+      --selected: #e8f0fe;
+      --teal: #007f92;
+      --teal-dark: #006676;
+      --red: #b40000;
+      --blue-dark: #0b2a57;
+      --left-width: 500px;
+      --page-width: 1680px;
+      --header-height: 96px;
+      --strip-height: 20px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 16px;
+      color: #111;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: #fff;
+      padding: 7px 10px;
+      border-radius: 4px;
+    }
+
+    button:hover {
+      background: #f3f3f3;
+    }
+
+    button.primary {
+      border-color: var(--teal);
+      color: #fff;
+      background: var(--teal);
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 10px 20px;
+      border-radius: 6px;
+    }
+
+    button.primary:hover {
+      background: var(--teal-dark);
+    }
+
+    button.light {
+      border-color: #c5c5c5;
+      background: #fff;
+      color: #222;
+      padding: 9px 16px;
+      border-radius: 6px;
+    }
+
+    .portal-header {
+      height: var(--header-height);
+      background: #fff;
+    }
+
+    .portal-inner {
+      width: min(var(--page-width), calc(100vw - 56px));
+      height: 100%;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 20px;
+    }
+
+    .portal-brand {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-width: 0;
+      text-decoration: none;
+      color: #050b14;
+    }
+
+    .portal-brand img {
+      height: 68px;
+      width: auto;
+      display: block;
+      flex: 0 0 auto;
+    }
+
+    .portal-brand-title {
+      font-size: 30px;
+      line-height: 1;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      text-transform: uppercase;
+      color: #050b14;
+      white-space: nowrap;
+    }
+
+    .portal-strip {
+      height: var(--strip-height);
+      background: #efefec;
+      border-top: 1px solid #f2f2f2;
+    }
+
+    .page-shell {
+      width: min(var(--page-width), calc(100vw - 56px));
+
+      /*
+       * 100vh funciona como alternativa para navegadores antigos.
+       * 100dvh usa a altura efetivamente disponível no navegador.
+       */
+      height: calc(100vh - var(--header-height) - var(--strip-height));
+      height: calc(100dvh - var(--header-height) - var(--strip-height));
+
+      margin: 0 auto;
+      padding: 18px 0 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .test-note {
+      flex: 0 0 auto;
+      padding: 10px 14px;
+      border-left: 5px solid var(--red);
+      background: #fff7f7;
+      color: #333;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .test-note strong {
+      color: #8a0000;
+    }
+
+    .search-card {
+      flex: 0 0 auto;
+      border: 1px solid var(--border);
+      background: var(--soft);
+    }
+
+    .search-card-header {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 16px;
+      background: var(--teal);
+      color: #fff;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.01em;
+    }
+
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    #headerStatus {
+      font-size: 13px;
+      font-weight: normal;
+      text-transform: none;
+      text-align: right;
+    }
+
+    .refresh-data-button {
+      flex: 0 0 auto;
+      border: 1px solid rgba(255, 255, 255, 0.85);
+      background: transparent;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 5px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .refresh-data-button:hover {
+      background: rgba(255, 255, 255, 0.13);
+    }
+
+    .refresh-data-button:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
+
+    .search-card-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .search-icon {
+      width: 22px;
+      height: 22px;
+      display: inline-block;
+      position: relative;
+      flex: 0 0 auto;
+    }
+
+    .search-icon::before {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      left: 1px;
+      top: 1px;
+    }
+
+    .search-icon::after {
+      content: "";
+      position: absolute;
+      width: 10px;
+      height: 2px;
+      background: #fff;
+      transform: rotate(45deg);
+      left: 12px;
+      top: 15px;
+      border-radius: 2px;
+    }
+
+    .search-card-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 10px;
+      align-items: center;
+      padding: 14px 20px;
+    }
+
+    .search-field {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      border: 1px solid #bbb;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #fff;
+      min-width: 0;
+    }
+
+    .search-field label {
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      background: #e5e3dc;
+      border-right: 1px solid #bbb;
+      min-height: 42px;
+      font-size: 16px;
+    }
+
+    .search-field input {
+      border: 0;
+      padding: 0 14px;
+      font-size: 16px;
+      min-width: 0;
+      outline: none;
+    }
+
+    .workspace {
+      flex: 1 1 auto;
+      min-height: 0;
+      border: 1px solid var(--border);
+      background: #fff;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .workspace-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      background: #fafafa;
+    }
+
+    .workspace-title strong {
+      font-size: 17px;
+    }
+
+    .workspace-title span {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: right;
+    }
+
+    .workspace-body {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: var(--left-width) 7px 1fr;
+    }
+
+    .left {
+      min-height: 0;
+      border-right: 1px solid var(--border);
+      padding: 14px;
+      overflow: auto;
+      background: #fff;
+    }
+
+    .splitter {
+      cursor: col-resize;
+      background: #f4f4f4;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      position: relative;
+    }
+
+    .splitter::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 2px;
+      width: 1px;
+      height: 42px;
+      transform: translateY(-50%);
+      background: #aaa;
+      box-shadow: 2px 0 0 #aaa;
+      opacity: 0.7;
+    }
+
+    .splitter:hover,
+    .splitter.resizing {
+      background: var(--selected);
+    }
+
+    body.resizing {
+      cursor: col-resize;
+      user-select: none;
+    }
+
+    .right {
+      min-height: 0;
+      padding: 18px 24px;
+      overflow: auto;
+      background: #fff;
+    }
+
+    .section-title {
+      font-weight: bold;
+      margin: 0 0 8px;
+    }
+
+    .tree-toolbar {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .tree-toolbar button {
+      font-size: 14px;
+      padding: 6px 9px;
+    }
+
+    .tree-box {
+      border: 1px solid var(--border);
+      min-height: 240px;
+      padding: 6px;
+      background: #fff;
+      overflow: visible;
+    }
+
+    .tree-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 30px;
+      padding: 3px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+      font-size: 15px;
+    }
+
+    .tree-item:hover {
+      background: #f5f5f5;
+    }
+
+    .tree-item.selected {
+      background: var(--selected);
+      color: #0b3d91;
+      font-weight: bold;
+    }
+
+    .toggle {
+      width: 24px;
+      flex: 0 0 24px;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: #333;
+      font-size: 16px;
+      font-weight: bold;
+      line-height: 1;
+    }
+
+    .term-label {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      padding: 5px 4px;
+      font-size: 15px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .term-label:hover,
+    .toggle:hover {
+      background: transparent;
+    }
+
+    .search-match-badge {
+      flex: 0 0 auto;
+      font-size: 12px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: #fff;
+      font-weight: normal;
+    }
+
+    .term-header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+
+    .term-header h1 {
+      font-size: 28px;
+      margin: 0 0 4px;
+      font-weight: normal;
+      color: #111;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin: 0 0 12px;
+    }
+
+    .summary-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #f7f7f7;
+      padding: 9px 10px;
+    }
+
+    .summary-card strong {
+      display: block;
+      font-size: 18px;
+      margin-bottom: 2px;
+    }
+
+    .summary-card span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .accordion-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    details.accordion {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    details.accordion summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 11px 14px;
+      font-weight: 700;
+      background: #f7f7f7;
+      border-bottom: 1px solid transparent;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    details.accordion summary::-webkit-details-marker {
+      display: none;
+    }
+
+    details.accordion summary::after {
+      content: "▸";
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    details.accordion[open] summary {
+      border-bottom-color: var(--border);
+    }
+
+    details.accordion[open] summary::after {
+      content: "▾";
+    }
+
+    .accordion-content {
+      padding: 12px 14px;
+      line-height: 1.5;
+    }
+
+    .text-block {
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+
+    .field-block {
+      margin-bottom: 14px;
+    }
+
+    .field-block:last-child {
+      margin-bottom: 0;
+    }
+
+    .field-label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .small-list {
+      line-height: 1.7;
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .object-links {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .object-links a {
+      display: inline-block;
+      color: var(--teal);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .object-links a:hover {
+      text-decoration: underline;
+    }
+
+    .link-button {
+      color: var(--teal);
+      border: 0;
+      padding: 0;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      line-height: 1.4;
+      font-weight: 700;
+    }
+
+    .link-button:hover {
+      text-decoration: underline;
+      background: transparent;
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 10px;
+    }
+
+    .error {
+      border: 1px solid #d9b0b0;
+      background: #fff0f0;
+      color: #8a1f1f;
+      padding: 12px;
+      border-radius: 6px;
+      line-height: 1.5;
+    }
+
+    /*
+     * Ajustes por largura.
+     */
+
+    @media (max-width: 1000px) {
+      :root {
+        --left-width: 420px;
+      }
+
+      .portal-brand img {
+        height: 58px;
+      }
+
+      .portal-brand-title {
+        font-size: 26px;
+      }
+    }
+
+    @media (max-width: 850px) {
+      body {
+        overflow: auto;
+      }
+
+      .portal-header {
+        height: auto;
+      }
+
+      .portal-inner {
+        width: min(100vw - 20px, var(--page-width));
+        height: auto;
+        min-height: auto;
+        padding: 14px 0;
+      }
+
+      .portal-brand img {
+        height: 54px;
+      }
+
+      .portal-brand-title {
+        font-size: 24px;
+      }
+
+      .portal-strip {
+        height: 14px;
+      }
+
+      .page-shell {
+        width: min(100vw - 20px, var(--page-width));
+        height: auto;
+        min-height: auto;
+        padding: 14px 0 22px;
+      }
+
+      .header-actions {
+        align-items: flex-end;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      #headerStatus {
+        text-align: right;
+      }
+
+      .search-card-body {
+        grid-template-columns: 1fr;
+      }
+
+      .search-field {
+        grid-template-columns: 1fr;
+      }
+
+      .search-field label {
+        border-right: 0;
+        border-bottom: 1px solid #bbb;
+        min-height: 40px;
+      }
+
+      .search-field input {
+        min-height: 44px;
+      }
+
+      .workspace {
+        display: block;
+      }
+
+      .workspace-title {
+        display: block;
+      }
+
+      .workspace-title span {
+        display: block;
+        margin-top: 4px;
+        text-align: left;
+      }
+
+      .workspace-body {
+        display: block;
+      }
+
+      .splitter {
+        display: none;
+      }
+
+      .left {
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+        max-height: 45vh;
+      }
+
+      .right {
+        padding: 14px 12px;
+      }
+
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /*
+     * Ajustes por altura.
+     *
+     * Um notebook pode ter boa largura, mas pouca altura disponível.
+     * Nesse caso, o cabeçalho, o aviso e a pesquisa são compactados
+     * para preservar mais espaço para a hierarquia e para os detalhes.
+     */
+
+    @media (max-height: 820px) and (min-width: 851px) {
+      :root {
+        --header-height: 72px;
+        --strip-height: 10px;
+      }
+
+      .portal-inner {
+        gap: 14px;
+      }
+
+      .portal-brand {
+        gap: 14px;
+      }
+
+      .portal-brand img {
+        height: 50px;
+      }
+
+      .portal-brand-title {
+        font-size: 25px;
+      }
+
+      .page-shell {
+        padding: 8px 0 10px;
+        gap: 8px;
+      }
+
+      .test-note {
+        padding: 6px 10px;
+        border-left-width: 4px;
+        font-size: 12px;
+        line-height: 1.3;
+      }
+
+      .search-card-header {
+        min-height: 34px;
+        padding: 0 12px;
+        font-size: 14px;
+      }
+
+      .search-icon {
+        width: 19px;
+        height: 19px;
+      }
+
+      .search-icon::before {
+        width: 10px;
+        height: 10px;
+      }
+
+      .search-icon::after {
+        width: 8px;
+        left: 11px;
+        top: 13px;
+      }
+
+      .search-card-body {
+        gap: 8px;
+        padding: 8px 12px;
+      }
+
+      .search-field label {
+        min-height: 36px;
+        padding: 0 12px;
+        font-size: 14px;
+      }
+
+      .search-field input {
+        min-height: 36px;
+        padding: 0 12px;
+        font-size: 14px;
+      }
+
+      button.primary {
+        padding: 7px 16px;
+        font-size: 14px;
+      }
+
+      button.light {
+        padding: 7px 14px;
+        font-size: 14px;
+      }
+
+      .workspace-title {
+        padding: 7px 10px;
+      }
+
+      .workspace-title strong {
+        font-size: 15px;
+      }
+
+      .workspace-title span {
+        font-size: 12px;
+      }
+
+      .left {
+        padding: 10px;
+      }
+
+      .tree-toolbar {
+        margin-bottom: 7px;
+      }
+
+      .tree-toolbar button {
+        padding: 5px 8px;
+        font-size: 13px;
+      }
+
+      .tree-item {
+        min-height: 27px;
+        font-size: 14px;
+      }
+
+      .term-label {
+        padding-top: 3px;
+        padding-bottom: 3px;
+        font-size: 14px;
+      }
+
+      .right {
+        padding: 12px 18px;
+      }
+
+      .term-header {
+        padding-bottom: 7px;
+        margin-bottom: 8px;
+      }
+
+      .term-header h1 {
+        font-size: 24px;
+      }
+
+      .summary-grid {
+        margin-bottom: 8px;
+      }
+
+      .summary-card {
+        padding: 7px 9px;
+      }
+
+      .summary-card strong {
+        font-size: 16px;
+      }
+
+      .accordion-list {
+        gap: 6px;
+      }
+
+      details.accordion summary {
+        padding: 8px 12px;
+      }
+
+      .accordion-content {
+        padding: 9px 12px;
+      }
+    }
+
+    /*
+     * Para telas muito baixas, a página passa a usar rolagem geral.
+     * Isso evita que a área de dados fique excessivamente comprimida.
+     */
+
+    @media (max-height: 650px) and (min-width: 851px) {
+      body {
+        overflow: auto;
+      }
+
+      .page-shell {
+        height: auto;
+        min-height: 560px;
+      }
+
+      .workspace {
+        min-height: 420px;
+      }
+
+      .workspace-body {
+        min-height: 360px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="portal-header">
+    <div class="portal-inner">
+      <a class="portal-brand" href="#" aria-label="Página inicial da consulta ao Thesaurus">
+        <img src="assets/logo-almg.png" alt="Assembleia Legislativa de Minas Gerais">
+        <span class="portal-brand-title">Thesaurus</span>
+      </a>
+    </div>
+  </header>
+
+  <div class="portal-strip"></div>
+
+  <div class="page-shell">
+    <div class="test-note">
+      <strong>Aviso:</strong> esta página não é uma página oficial da ALMG. Trata-se de um ambiente de teste desenvolvido pela Gerência de Informação Legislativa para fins de avaliação da consulta ao thesaurus.
+    </div>
+
+    <section class="search-card" aria-label="Pesquisar Thesaurus">
+      <div class="search-card-header">
+        <div class="search-card-title">
+          <span class="search-icon" aria-hidden="true"></span>
+          <span>Pesquisar Thesaurus</span>
+        </div>
+
+        <div class="header-actions">
+          <span id="headerStatus">Carregando dados...</span>
+
+          <button
+            id="refreshDataBtn"
+            class="refresh-data-button"
+            type="button"
+            title="Ignora o cache e consulta novamente a API de Dados Abertos da ALMG"
+          >
+            Atualizar dados
+          </button>
+        </div>
+      </div>
+
+      <div class="search-card-body">
+        <div class="search-field">
+          <label for="searchInput">Assunto</label>
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Digite um termo, definição, nota ou sinônimo"
+          />
+        </div>
+
+        <button id="searchBtn" class="primary" type="button">
+          Pesquisar
+        </button>
+
+        <button id="clearSearchBtn" class="light" type="button">
+          Limpar
+        </button>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <div class="workspace-title">
+        <strong>Resultado da consulta</strong>
+
+        <span>
+          Selecione um termo na hierarquia para ver definições, notas,
+          relacionamentos e objetos indexados.
+        </span>
+      </div>
+
+      <div class="workspace-body">
+        <aside class="left">
+          <div class="section-title">Hierarquia</div>
+
+          <div class="tree-toolbar">
+            <button id="collapseBtn" type="button">
+              Recolher
+            </button>
+
+            <button id="expandClassesBtn" type="button">
+              Expandir classes
+            </button>
+          </div>
+
+          <div id="tree" class="tree-box">
+            <div class="empty">Carregando termos...</div>
+          </div>
+        </aside>
+
+        <div
+          id="splitter"
+          class="splitter"
+          title="Arraste para redimensionar as áreas"
+        ></div>
+
+        <section class="right">
+          <div id="termArea">
+            <div class="empty">Carregando thesaurus...</div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // ============================================================
+    // CONFIGURAÇÃO DA API E DO CACHE
+    // ============================================================
+
+    const API_BASE_URL =
+      "https://dadosabertos.almg.gov.br/api/v2/thesaurus";
+
+    const API_LIST_URL =
+      `${API_BASE_URL}/termos/lista`;
+
+    // Mantido aqui para referencia. A busca da pagina continua local,
+    // porque o snapshot diario ja fica carregado no navegador.
+    const API_SEARCH_URL =
+      `${API_BASE_URL}/termos/pesquisa`;
+
+    const API_TERM_URL = numero =>
+      `${API_BASE_URL}/termos/${encodeURIComponent(numero)}`;
+
+    // Horario local do navegador. Se a pagina estiver fechada as 3h,
+    // a atualizacao sera feita no primeiro acesso posterior a esse horario.
+    const DAILY_REFRESH_HOUR = 3;
+
+    // A ALMG recomenda intervalo minimo de um segundo entre requisicoes.
+    const API_MIN_INTERVAL_MS = 1100;
+
+    // O endpoint /termos/lista e paginado.
+    // p = pagina; tp = quantidade solicitada por pagina.
+    // A coleta NAO presume que o servidor respeite exatamente esse tamanho.
+    const API_PAGE_SIZE = 1000;
+    const API_MAX_PAGES = 2000;
+
+    // Referencia de integridade obtida do CSV atual do Thesaurus (11/08/2026).
+    // O endpoint /lista pode devolver apenas os descritores diretamente listados,
+    // enquanto os ancestrais estruturais aparecem nos caminhos de hierarquia.
+    // A validacao ocorre DEPOIS de reconstruir esses caminhos.
+    const MIN_EXPECTED_AUTHORIZED_TERMS = 4000;
+
+    const EXPECTED_TOP_BRANCHES = [
+      "Destinatários",
+      "Localidade Geográfica",
+      "Tema",
+      "Tempo"
+    ];
+
+    const CACHE_DB_NAME = "thesaurus_almg_cache";
+    const CACHE_DB_VERSION = 1;
+    const CACHE_STORE_NAME = "snapshots";
+    const CACHE_KEY = "thesaurus_atual";
+    const CACHE_SCHEMA_VERSION = 5;
+
+    let state = {
+      selectedId: null,
+      expanded: [],
+      terms: []
+    };
+
+    let termById = new Map();
+    let termByName = new Map();
+    let childrenByParent = new Map();
+    let termPathCache = new Map();
+    let lastApiRequestFinishedAt = 0;
+    let refreshTimer = null;
+    let refreshInProgress = false;
+    let cacheSaveTimer = null;
+
+    const treeEl = document.getElementById("tree");
+    const termArea = document.getElementById("termArea");
+    const searchInput = document.getElementById("searchInput");
+    const searchBtn = document.getElementById("searchBtn");
+    const clearSearchBtn = document.getElementById("clearSearchBtn");
+    const collapseBtn = document.getElementById("collapseBtn");
+    const expandClassesBtn = document.getElementById("expandClassesBtn");
+    const headerStatus = document.getElementById("headerStatus");
+    const refreshDataBtn = document.getElementById("refreshDataBtn");
+    const splitter = document.getElementById("splitter");
+
+    const LAYOUT_KEY = "consulta_thesaurus_left_width";
+
+    const ICMG_CLASSES_SEM_RAIZ = new Set([
+      "sem classe",
+      "estrutura administrativa"
+    ]);
+
+    const ICMG_CLASSES_DESCARTADAS = new Set([
+      "thesaurus"
+    ]);
+
+    const ICMG_TERMOS_DESCARTADOS = new Set([
+      "thesaurus"
+    ]);
+
+    document.addEventListener("DOMContentLoaded", () => {
+      initResizableLayout();
+
+      searchInput.addEventListener("input", () => {
+        renderTree();
+      });
+
+      searchInput.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          runSearch();
+        }
+      });
+
+      searchBtn.addEventListener("click", runSearch);
+
+      clearSearchBtn.addEventListener("click", () => {
+        searchInput.value = "";
+        state.expanded = [];
+        renderTree();
+        searchInput.focus();
+      });
+
+      collapseBtn.addEventListener("click", () => {
+        state.expanded = [];
+        renderTree();
+      });
+
+      expandClassesBtn.addEventListener("click", () => {
+        state.expanded = rootTermIds();
+        renderTree();
+      });
+
+      refreshDataBtn.addEventListener("click", () => {
+        atualizarDadosDaApi({
+          force: true,
+          reason: "manual"
+        });
+      });
+
+      window.addEventListener("hashchange", () => {
+        const id = decodeURIComponent(
+          location.hash.replace(/^#/, "")
+        );
+
+        if (id && getTerm(id)) {
+          openTerm(id, false);
+        }
+      });
+
+      loadState();
+    });
+
+    function runSearch() {
+      const query = searchInput.value.trim();
+
+      renderTree();
+
+      if (!query) {
+        return;
+      }
+
+      const firstMatch = state.terms.find(term =>
+        matchesTerm(term, query)
+      );
+
+      if (firstMatch) {
+        openTerm(firstMatch.id);
+      }
+    }
+    function setLeftWidth(px) {
+      const min = 300;
+
+      const pageRect = document
+        .querySelector(".page-shell")
+        ?.getBoundingClientRect();
+
+      const pageWidth = pageRect
+        ? pageRect.width
+        : window.innerWidth;
+
+      const max = Math.max(420, pageWidth - 520);
+
+      const width = Math.min(
+        Math.max(Number(px) || 500, min),
+        max
+      );
+
+      document.documentElement.style.setProperty(
+        "--left-width",
+        `${width}px`
+      );
+
+      localStorage.setItem(
+        LAYOUT_KEY,
+        String(width)
+      );
+    }
+
+    function initResizableLayout() {
+      if (!splitter) {
+        return;
+      }
+
+      const savedWidth = Number(
+        localStorage.getItem(LAYOUT_KEY)
+      );
+
+      if (savedWidth) {
+        setLeftWidth(savedWidth);
+      }
+
+      let resizing = false;
+
+      splitter.addEventListener("pointerdown", event => {
+        resizing = true;
+
+        splitter.classList.add("resizing");
+        document.body.classList.add("resizing");
+
+        splitter.setPointerCapture(event.pointerId);
+      });
+
+      splitter.addEventListener("pointermove", event => {
+        if (!resizing) {
+          return;
+        }
+
+        const pageLeft =
+          document
+            .querySelector(".page-shell")
+            ?.getBoundingClientRect()
+            .left || 0;
+
+        setLeftWidth(event.clientX - pageLeft);
+      });
+
+      function stopResize(event) {
+        if (!resizing) {
+          return;
+        }
+
+        resizing = false;
+
+        splitter.classList.remove("resizing");
+        document.body.classList.remove("resizing");
+
+        if (event?.pointerId !== undefined) {
+          try {
+            splitter.releasePointerCapture(
+              event.pointerId
+            );
+          } catch {
+            // Alguns navegadores liberam automaticamente.
+          }
+        }
+      }
+
+      splitter.addEventListener(
+        "pointerup",
+        stopResize
+      );
+
+      splitter.addEventListener(
+        "pointercancel",
+        stopResize
+      );
+
+      splitter.addEventListener("dblclick", () => {
+        setLeftWidth(500);
+      });
+    }
+
+    // ============================================================
+    // CARGA INICIAL, CACHE DIARIO E ATUALIZACAO MANUAL
+    // ============================================================
+
+    async function loadState() {
+      let cached = null;
+
+      try {
+        setStatus("Verificando cache local...");
+        cached = await readCache();
+      } catch (error) {
+        console.warn("Nao foi possivel ler o cache IndexedDB.", error);
+      }
+
+      const currentCycle = getRefreshCycleKey(new Date());
+      const cacheIsUsable =
+        cached &&
+        cached.schemaVersion === CACHE_SCHEMA_VERSION &&
+        Array.isArray(cached.terms) &&
+        cached.terms.length;
+
+      if (cacheIsUsable) {
+        applyTerms(cached.terms, {
+          updatedAt: cached.updatedAt,
+          source: "cache"
+        });
+      }
+
+      if (
+        cacheIsUsable &&
+        cached.cycleKey === currentCycle &&
+        cached.complete !== false
+      ) {
+        setReadyStatus(cached.updatedAt, "cache");
+      } else {
+        if (cacheIsUsable) {
+          setStatus(
+            "Dados em cache; verificando atualizacao diaria..."
+          );
+        }
+
+        await atualizarDadosDaApi({
+          force: true,
+          reason: cacheIsUsable ? "daily" : "initial",
+          keepExistingOnError: cacheIsUsable
+        });
+      }
+
+      scheduleNextDailyRefresh();
+    }
+
+    async function atualizarDadosDaApi({
+      force = false,
+      reason = "manual",
+      keepExistingOnError = true
+    } = {}) {
+      if (refreshInProgress) {
+        return;
+      }
+
+      refreshInProgress = true;
+      setRefreshButtonBusy(true);
+
+      const previousTerms = state.terms;
+      let previousSnapshot = null;
+
+      try {
+        previousSnapshot = await readCache().catch(() => null);
+
+        if (!force) {
+          const cycle = getRefreshCycleKey(new Date());
+
+          if (
+            previousSnapshot &&
+            previousSnapshot.schemaVersion === CACHE_SCHEMA_VERSION &&
+            previousSnapshot.cycleKey === cycle &&
+            previousSnapshot.complete === true &&
+            Array.isArray(previousSnapshot.terms) &&
+            previousSnapshot.terms.length
+          ) {
+            applyTerms(previousSnapshot.terms, {
+              updatedAt: previousSnapshot.updatedAt,
+              source: "cache",
+              stats: previousSnapshot.stats
+            });
+
+            setReadyStatus(
+              previousSnapshot.updatedAt,
+              "cache",
+              previousSnapshot.stats
+            );
+            return;
+          }
+        }
+
+        setStatus(
+          reason === "manual"
+            ? "Atualizando dados pela API..."
+            : "Buscando atualização diária na API..."
+        );
+
+        const result = await carregarTodosOsTermosDaApi();
+        const adapted = adaptarListaDaApi(result.records);
+        const terms = adapted.terms;
+
+        const validation = validarEstruturaThesaurus(
+          terms,
+          previousSnapshot?.terms || previousTerms
+        );
+
+        if (!validation.ok) {
+          const detail = validation.errors.join(" | ");
+          const diagnostic =
+            `diagnóstico da coleta: ${adapted.stats.directAuthorizedRecords.toLocaleString("pt-BR")} ` +
+            `autorizado(s) direto(s), ${adapted.stats.hierarchyPathCount.toLocaleString("pt-BR")} ` +
+            `caminho(s) hierárquico(s), ${adapted.stats.recoveredHierarchyNodes.toLocaleString("pt-BR")} ` +
+            `nó(s) recuperado(s), ${result.stats.pagesFetched.toLocaleString("pt-BR")} página(s); ` +
+            `fim: ${result.stats.stopReason || "não informado"}`;
+
+          throw new Error(
+            "A atualização foi recusada porque a resposta da API parece incompleta. " +
+            detail + " | " + diagnostic
+          );
+        }
+
+        const now = new Date();
+        const stats = {
+          ...result.stats,
+          ...adapted.stats,
+          descriptors: validation.descriptors,
+          activeDescriptors: validation.activeDescriptors,
+          inactiveDescriptors: validation.inactiveDescriptors,
+          mappedRemissives: validation.mappedRemissives,
+          roots: validation.roots,
+          orphanCount: validation.orphanCount
+        };
+
+        const snapshot = {
+          schemaVersion: CACHE_SCHEMA_VERSION,
+          cycleKey: getRefreshCycleKey(now),
+          updatedAt: now.toISOString(),
+          complete: true,
+          stats,
+          terms
+        };
+
+        // So substitui o cache depois de toda a validacao.
+        await writeCache(snapshot);
+
+        applyTerms(terms, {
+          updatedAt: snapshot.updatedAt,
+          source: "api",
+          stats
+        });
+
+        setReadyStatus(snapshot.updatedAt, "api", stats);
+      } catch (error) {
+        console.error(error);
+
+        if (
+          keepExistingOnError &&
+          Array.isArray(previousTerms) &&
+          previousTerms.length
+        ) {
+          setStatus(
+            `Falha ao atualizar; mantendo o último cache válido. ${error.message}`
+          );
+        } else {
+          treeEl.innerHTML =
+            '<div class="empty">Nenhum termo carregado.</div>';
+
+          termArea.innerHTML = `
+            <div class="error">
+              <strong>Não foi possível carregar um snapshot válido do Thesaurus.</strong><br>
+              A página tentou consultar:<br>
+              <code>${escapeHtml(API_LIST_URL)}</code>
+              <br><br>
+              Detalhe técnico: ${escapeHtml(error.message)}
+              <br><br>
+              A página não grava respostas incompletas no cache. Atualmente, a
+              referência de integridade é de pelo menos
+              <strong>${MIN_EXPECTED_AUTHORIZED_TERMS.toLocaleString("pt-BR")}</strong>
+              descritores autorizados e uma hierarquia sem termos órfãos.
+              <br><br>
+              Se o navegador mencionar <strong>CORS</strong>, será necessário
+              publicar a página em origem autorizada ou utilizar um proxy/backend.
+            </div>
+          `;
+
+          setStatus("Erro ao carregar dados.");
+        }
+      } finally {
+        refreshInProgress = false;
+        setRefreshButtonBusy(false);
+      }
+    }
+
+    function applyTerms(terms, meta = {}) {
+      const previousSelectedId = state.selectedId;
+
+      state = {
+        selectedId: null,
+        expanded: [],
+        terms: Array.isArray(terms) ? terms : []
+      };
+
+      buildIndexes();
+
+      const hashId = decodeURIComponent(
+        location.hash.replace(/^#/, "")
+      );
+
+      if (hashId && getTerm(hashId)) {
+        state.selectedId = hashId;
+        expandAncestors(hashId);
+      } else if (
+        previousSelectedId &&
+        getTerm(previousSelectedId)
+      ) {
+        state.selectedId = previousSelectedId;
+        expandAncestors(previousSelectedId);
+      } else {
+        state.selectedId = firstSelectableTermId();
+      }
+
+      render();
+
+      const selected = getTerm(state.selectedId);
+      if (selected) {
+        carregarDetalhesSeNecessario(selected);
+      }
+    }
+
+    function setReadyStatus(updatedAt, source, stats = null) {
+      const descriptors = state.terms.length;
+      const inactive = state.terms.filter(term => term.ativo === false).length;
+
+      const unauthorized = new Set();
+      for (const term of state.terms) {
+        for (const up of term.relacionadosNaoAutorizados || []) {
+          const value = String(up || "").trim();
+          if (value) unauthorized.add(normalizeIcmgName(value));
+        }
+      }
+
+      const dateText = formatDateTime(updatedAt);
+      const suffix = source === "api" ? "API" : "cache";
+      const pageInfo = stats?.pagesFetched
+        ? ` | ${stats.pagesFetched.toLocaleString("pt-BR")} página(s) da API`
+        : "";
+
+      const reconstructionInfo = stats?.directAuthorizedRecords != null
+        ? ` | ${Number(stats.directAuthorizedRecords).toLocaleString("pt-BR")} direto(s)` +
+          (stats.recoveredHierarchyNodes
+            ? ` + ${Number(stats.recoveredHierarchyNodes).toLocaleString("pt-BR")} recuperado(s) da hierarquia`
+            : "")
+        : "";
+
+      setStatus(
+        `${descriptors.toLocaleString("pt-BR")} descritor(es)` +
+        ` | ${inactive.toLocaleString("pt-BR")} inativo(s)` +
+        (unauthorized.size
+          ? ` | ${unauthorized.size.toLocaleString("pt-BR")} remissiva(s) mapeada(s)`
+          : "") +
+        ` | atualizado em ${dateText} | ${suffix}` +
+        reconstructionInfo +
+        pageInfo
+      );
+    }
+
+    function setRefreshButtonBusy(isBusy) {
+      if (!refreshDataBtn) {
+        return;
+      }
+
+      refreshDataBtn.disabled = Boolean(isBusy);
+      refreshDataBtn.textContent = isBusy
+        ? "Atualizando..."
+        : "Atualizar dados";
+    }
+
+    function formatDateTime(value) {
+      if (!value) {
+        return "data desconhecida";
+      }
+
+      const date = new Date(value);
+
+      if (Number.isNaN(date.getTime())) {
+        return "data desconhecida";
+      }
+
+      return new Intl.DateTimeFormat("pt-BR", {
+        dateStyle: "short",
+        timeStyle: "short"
+      }).format(date);
+    }
+
+    function getRefreshCycleKey(date) {
+      const adjusted = new Date(date);
+
+      if (adjusted.getHours() < DAILY_REFRESH_HOUR) {
+        adjusted.setDate(adjusted.getDate() - 1);
+      }
+
+      const year = adjusted.getFullYear();
+      const month = String(adjusted.getMonth() + 1).padStart(2, "0");
+      const day = String(adjusted.getDate()).padStart(2, "0");
+
+      return `${year}-${month}-${day}`;
+    }
+
+    function nextDailyRefreshDate(fromDate = new Date()) {
+      const next = new Date(fromDate);
+      next.setHours(DAILY_REFRESH_HOUR, 0, 0, 0);
+
+      if (next <= fromDate) {
+        next.setDate(next.getDate() + 1);
+      }
+
+      return next;
+    }
+
+    function scheduleNextDailyRefresh() {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+
+      const now = new Date();
+      const next = nextDailyRefreshDate(now);
+      const delay = Math.max(1000, next.getTime() - now.getTime() + 5000);
+
+      refreshTimer = setTimeout(async () => {
+        await atualizarDadosDaApi({
+          force: true,
+          reason: "daily"
+        });
+
+        scheduleNextDailyRefresh();
+      }, delay);
+    }
+
+    // ============================================================
+    // INDEXEDDB
+    // ============================================================
+
+    function openCacheDb() {
+      return new Promise((resolve, reject) => {
+        if (!("indexedDB" in window)) {
+          reject(new Error("IndexedDB nao esta disponivel neste navegador."));
+          return;
+        }
+
+        const request = indexedDB.open(
+          CACHE_DB_NAME,
+          CACHE_DB_VERSION
+        );
+
+        request.onupgradeneeded = () => {
+          const db = request.result;
+
+          if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
+            db.createObjectStore(CACHE_STORE_NAME);
+          }
+        };
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function readCache() {
+      const db = await openCacheDb();
+
+      try {
+        return await new Promise((resolve, reject) => {
+          const tx = db.transaction(CACHE_STORE_NAME, "readonly");
+          const store = tx.objectStore(CACHE_STORE_NAME);
+          const request = store.get(CACHE_KEY);
+
+          request.onsuccess = () => resolve(request.result || null);
+          request.onerror = () => reject(request.error);
+        });
+      } finally {
+        db.close();
+      }
+    }
+
+    async function writeCache(snapshot) {
+      const db = await openCacheDb();
+
+      try {
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(CACHE_STORE_NAME, "readwrite");
+          const store = tx.objectStore(CACHE_STORE_NAME);
+
+          store.put(snapshot, CACHE_KEY);
+
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error);
+        });
+      } finally {
+        db.close();
+      }
+    }
+
+    function scheduleCacheSave() {
+      if (cacheSaveTimer) {
+        clearTimeout(cacheSaveTimer);
+      }
+
+      cacheSaveTimer = setTimeout(async () => {
+        try {
+          const existing = await readCache();
+
+          await writeCache({
+            schemaVersion: CACHE_SCHEMA_VERSION,
+            cycleKey:
+              existing?.cycleKey || getRefreshCycleKey(new Date()),
+            updatedAt:
+              existing?.updatedAt || new Date().toISOString(),
+            complete: existing?.complete !== false,
+            stats: existing?.stats || null,
+            terms: state.terms
+          });
+        } catch (error) {
+          console.warn("Nao foi possivel atualizar o cache.", error);
+        }
+      }, 400);
+    }
+
+    // ============================================================
+    // CLIENTE DA API - XML PREFERENCIAL, JSON COMO FALLBACK
+    // ============================================================
+
+    async function waitApiInterval() {
+      const elapsed = Date.now() - lastApiRequestFinishedAt;
+
+      if (
+        lastApiRequestFinishedAt &&
+        elapsed < API_MIN_INTERVAL_MS
+      ) {
+        await sleep(API_MIN_INTERVAL_MS - elapsed);
+      }
+    }
+
+    async function apiFetchStructured(url) {
+      await waitApiInterval();
+
+      let response;
+
+      try {
+        response = await fetch(url, {
+          method: "GET",
+          headers: {
+            Accept: "application/xml, text/xml;q=0.9, application/json;q=0.8"
+          },
+          cache: "no-store"
+        });
+      } catch (error) {
+        throw new Error(
+          `Falha de rede ao consultar a API: ${error.message}`
+        );
+      }
+
+      let body = "";
+
+      try {
+        body = await response.text();
+      } finally {
+        lastApiRequestFinishedAt = Date.now();
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          `API retornou HTTP ${response.status} em ${url}`
+        );
+      }
+
+      const contentType = (
+        response.headers.get("content-type") || ""
+      ).toLowerCase();
+
+      const trimmed = body.trim();
+
+      if (
+        contentType.includes("json") ||
+        trimmed.startsWith("{") ||
+        trimmed.startsWith("[")
+      ) {
+        try {
+          return {
+            format: "json",
+            payload: JSON.parse(body),
+            rawText: body
+          };
+        } catch (error) {
+          throw new Error(
+            `A API informou JSON, mas a resposta não pôde ser interpretada: ${error.message}`
+          );
+        }
+      }
+
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(body, "application/xml");
+      const parseError = xml.querySelector("parsererror");
+
+      if (parseError) {
+        throw new Error(
+          "A API não retornou XML válido. Início da resposta: " +
+          trimmed.slice(0, 180)
+        );
+      }
+
+      return {
+        format: "xml",
+        payload: xml,
+        rawText: body
+      };
+    }
+
+    async function apiFetchStructuredWithRetry(url, retries = 2) {
+      let lastError = null;
+
+      for (let attempt = 0; attempt <= retries; attempt += 1) {
+        try {
+          return await apiFetchStructured(url);
+        } catch (error) {
+          lastError = error;
+
+          if (/HTTP\s+(400|404)\b/.test(String(error.message || ""))) {
+            break;
+          }
+
+          if (attempt < retries) {
+            await sleep(API_MIN_INTERVAL_MS);
+          }
+        }
+      }
+
+      throw lastError || new Error("Falha desconhecida ao consultar a API.");
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function structuredTerms(response) {
+      if (response.format === "xml") {
+        return extractTermRecordsFromXml(response.payload);
+      }
+
+      return extractTermRecordsFromJson(response.payload);
+    }
+
+    function extractFirstStructuredTerm(response) {
+      const terms = structuredTerms(response);
+
+      if (terms.length) {
+        return terms[0];
+      }
+
+      // Alguns endpoints de detalhe em JSON devolvem diretamente o objeto,
+      // sem o campo "autorizado". Nesse caso tentamos normalizá-lo diretamente.
+      if (
+        response.format === "json" &&
+        response.payload &&
+        typeof response.payload === "object" &&
+        !Array.isArray(response.payload)
+      ) {
+        const direct = findLikelyDetailObject(response.payload);
+        if (direct) return direct;
+      }
+
+      throw new Error("Nenhum registro de termo foi reconhecido na resposta.");
+    }
+
+    function findLikelyDetailObject(payload) {
+      const visited = new Set();
+
+      function walk(value, depth = 0) {
+        if (
+          value == null ||
+          typeof value !== "object" ||
+          depth > 6 ||
+          visited.has(value)
+        ) {
+          return null;
+        }
+
+        visited.add(value);
+
+        if (!Array.isArray(value)) {
+          const numero = getField(value, [
+            "numero", "numdoc", "numeroDocumento", "numeroDoc",
+            "codigo", "cod", "controle", "id", "idTermo", "identificador"
+          ]);
+          const termo = getField(value, [
+            "termo", "nome", "descricao", "descritor", "nomeTermo"
+          ]);
+
+          if (numero !== undefined && termo !== undefined) {
+            return value;
+          }
+        }
+
+        for (const child of Object.values(value)) {
+          const found = walk(child, depth + 1);
+          if (found) return found;
+        }
+
+        return null;
+      }
+
+      return walk(payload);
+    }
+
+    async function carregarTodosOsTermosDaApi() {
+      const byKey = new Map();
+      const seenPageSignatures = new Set();
+      let pagina = 1;
+      let pagesFetched = 0;
+      let formatUsed = null;
+      let stopReason = "";
+
+      while (pagina <= API_MAX_PAGES) {
+        const url = new URL(API_LIST_URL);
+        url.searchParams.set("p", String(pagina));
+        url.searchParams.set("tp", String(API_PAGE_SIZE));
+
+        setStatus(
+          `Atualizando dados pela API... página ${pagina}` +
+          ` | ${byKey.size.toLocaleString("pt-BR")} registro(s) único(s)`
+        );
+
+        let response;
+
+        try {
+          response = await apiFetchStructured(url.toString());
+        } catch (error) {
+          if (
+            pagina > 1 &&
+            /HTTP\s+(400|404)\b/.test(String(error.message || ""))
+          ) {
+            stopReason = `HTTP de fim de paginação na página ${pagina}`;
+            break;
+          }
+
+          throw error;
+        }
+
+        pagesFetched += 1;
+        formatUsed = formatUsed || response.format;
+
+        const pageTerms = structuredTerms(response);
+
+        if (!pageTerms.length) {
+          stopReason = `página ${pagina} sem registros`;
+          break;
+        }
+
+        const pageKeys = pageTerms.map(recordIdentity).filter(Boolean);
+        const signature = pageKeys.join("|");
+
+        if (seenPageSignatures.has(signature)) {
+          stopReason = `a página ${pagina} repetiu uma página anterior`;
+          break;
+        }
+
+        seenPageSignatures.add(signature);
+
+        let newOnPage = 0;
+
+        for (const record of pageTerms) {
+          const key = recordIdentity(record);
+          if (!key) continue;
+
+          if (!byKey.has(key)) {
+            newOnPage += 1;
+          }
+
+          // Se o mesmo registro reaparecer, o último objeto prevalece.
+          byKey.set(key, record);
+        }
+
+        if (newOnPage === 0) {
+          stopReason = `página ${pagina} sem registros novos`;
+          break;
+        }
+
+        // IMPORTANTE: não encerramos por pageTerms.length < API_PAGE_SIZE.
+        // A API pode impor um limite próprio, inferior ao solicitado em tp.
+        pagina += 1;
+      }
+
+      if (pagina > API_MAX_PAGES) {
+        throw new Error(
+          `A paginação excedeu o limite de segurança de ${API_MAX_PAGES} páginas.`
+        );
+      }
+
+      const records = Array.from(byKey.values());
+
+      if (!records.length) {
+        throw new Error("A API respondeu, mas nenhum registro de termo foi reconhecido.");
+      }
+
+      console.info("Coleta do Thesaurus concluída", {
+        pagesFetched,
+        records: records.length,
+        formatUsed,
+        stopReason
+      });
+
+      return {
+        records,
+        stats: {
+          pagesFetched,
+          rawUniqueRecords: records.length,
+          formatUsed,
+          stopReason
+        }
+      };
+    }
+
+    function recordIdentity(raw) {
+      const numero = referenceNumber(
+        getField(raw, [
+          "numero", "numdoc", "numeroDocumento", "numeroDoc",
+          "codigo", "cod", "controle", "id", "idTermo", "identificador"
+        ])
+      );
+
+      if (numero) return `n:${numero}`;
+
+      const termo = referenceLabel(
+        getField(raw, [
+          "termo", "nome", "descricao", "descritor", "nomeTermo"
+        ])
+      );
+
+      return termo ? `t:${normalizeIcmgName(termo)}` : "";
+    }
+
+    // ---------------- XML ----------------
+
+    function xmlKey(node) {
+      return normalizeObjectKey(
+        node?.localName || node?.nodeName || ""
+      );
+    }
+
+    function xmlDirectElements(node) {
+      return Array.from(node?.children || []);
+    }
+
+    function xmlDirectChild(node, aliases) {
+      const wanted = new Set(aliases.map(normalizeObjectKey));
+      return xmlDirectElements(node).find(child =>
+        wanted.has(xmlKey(child))
+      ) || null;
+    }
+
+    function xmlFieldText(node, aliases) {
+      const child = xmlDirectChild(node, aliases);
+      return child ? String(child.textContent || "").trim() : "";
+    }
+
+    function xmlDescendantText(node, aliases) {
+      if (!node) return "";
+
+      const wanted = new Set(aliases.map(normalizeObjectKey));
+      const descendants = Array.from(
+        node.getElementsByTagName?.("*") || []
+      );
+
+      for (const child of descendants) {
+        if (wanted.has(xmlKey(child))) {
+          const value = String(child.textContent || "").trim();
+          if (value) return value;
+        }
+      }
+
+      return "";
+    }
+
+    function xmlBestText(node, aliases) {
+      return (
+        xmlFieldText(node, aliases) ||
+        xmlDescendantText(node, aliases)
+      );
+    }
+
+    function xmlReference(node) {
+      if (!node) return "";
+
+      const numero = xmlBestText(node, [
+        "numero", "numdoc", "numeroDocumento", "numeroDoc",
+        "codigo", "cod", "controle", "id", "idTermo", "identificador"
+      ]);
+      const termo = xmlBestText(node, [
+        "termo", "nome", "descricao", "descritor", "nomeTermo",
+        "label", "valor"
+      ]);
+
+      if (numero || termo) {
+        return {
+          numero: numero || null,
+          termo: termo || ""
+        };
+      }
+
+      const children = xmlDirectElements(node);
+
+      if (children.length === 1) {
+        return xmlReference(children[0]);
+      }
+
+      return String(node.textContent || "").trim();
+    }
+
+    function splitReferenceText(text) {
+      const value = String(text || "").trim();
+      if (!value) return [];
+
+      // A saída tabular do Thesaurus utiliza lista separada por vírgula.
+      // Preferimos ponto e vírgula quando houver; caso contrário, vírgula
+      // seguida de espaço. Elementos XML estruturados não passam por aqui.
+      const separator = value.includes(";") ? /\s*;\s*/ : /,\s+/;
+      return value.split(separator).map(item => item.trim()).filter(Boolean);
+    }
+
+    function xmlReferenceArray(field) {
+      if (!field) return [];
+
+      const children = xmlDirectElements(field);
+
+      if (!children.length) {
+        return splitReferenceText(field.textContent);
+      }
+
+      const refs = [];
+
+      function visit(node) {
+        const direct = xmlDirectElements(node);
+        const hasIdentity = Boolean(
+          xmlDirectChild(node, [
+            "numero", "numdoc", "numeroDocumento", "numeroDoc",
+            "codigo", "cod", "controle", "id", "idTermo", "identificador",
+            "termo", "nome", "descricao", "descritor", "nomeTermo",
+            "label", "valor"
+          ])
+        );
+
+        if (hasIdentity) {
+          const ref = xmlReference(node);
+          if (referenceLabel(ref) || referenceNumber(ref)) refs.push(ref);
+          return;
+        }
+
+        if (!direct.length) {
+          refs.push(...splitReferenceText(node.textContent));
+          return;
+        }
+
+        direct.forEach(visit);
+      }
+
+      children.forEach(visit);
+      return refs;
+    }
+
+    function xmlHierarchyPaths(node) {
+      const paths = [];
+      const candidates = Array.from(node?.getElementsByTagName?.("*") || []);
+
+      for (const candidate of candidates) {
+        const key = xmlKey(candidate);
+
+        if (
+          key === "hierarquia" ||
+          key === "caminho" ||
+          key === "path" ||
+          key === "ocorrenciahierarquia" ||
+          key === "ocorrenciashierarquias" ||
+          key === "hierarchypath" ||
+          key === "hierarchypaths"
+        ) {
+          const text = String(candidate.textContent || "").trim();
+
+          if (
+            text &&
+            text.length < 4000 &&
+            (
+              text.includes("/") ||
+              text.includes(" > ") ||
+              text.includes("→") ||
+              text.includes("|")
+            )
+          ) {
+            paths.push(text);
+          }
+        }
+      }
+
+      return Array.from(new Set(paths));
+    }
+
+    function xmlRecordToObject(node) {
+      const termoGeralNode = xmlDirectChild(node, [
+        "termoGeral", "termosGerais", "termoGenerico", "termoPai",
+        "termoSuperior", "pai", "ascendente", "broaderTerm", "tg"
+      ]);
+
+      const parentId = xmlBestText(node, [
+        "termoPaiId", "idTermoPai", "termoGeralId", "idTermoGeral",
+        "idPai", "paiId", "idAscendente", "ascendenteId"
+      ]);
+
+      let termoGeral = termoGeralNode
+        ? xmlReference(termoGeralNode)
+        : "";
+
+      if (parentId) {
+        const label = referenceLabel(termoGeral);
+        termoGeral = {
+          id: parentId,
+          numero: referenceNumber(termoGeral),
+          termo: label
+        };
+      }
+
+      const especificosNode = xmlDirectChild(node, [
+        "termosEspecificos", "termoEspecifico", "termosFilhos",
+        "filhos", "descendentes", "narrowerTerms", "te"
+      ]);
+
+      const relacionadosNode = xmlDirectChild(node, [
+        "termosRelacionados", "termoRelacionado", "relacionados",
+        "relatedTerms", "tr"
+      ]);
+
+      const naoAutorizadosNode = xmlDirectChild(node, [
+        "termosNaoAutorizados", "termoNaoAutorizado", "naoAutorizados",
+        "naoAutorizado", "usadoPor", "usadosPor", "useFor",
+        "sinonimos", "up"
+      ]);
+
+      const useNode = xmlDirectChild(node, [
+        "use", "usar", "termoPreferido", "descritorAutorizado",
+        "termoAutorizadoReferencia"
+      ]);
+
+      return {
+        numero: xmlBestText(node, [
+          "numero", "numdoc", "numeroDocumento", "numeroDoc",
+          "codigo", "cod", "controle", "id", "idTermo", "identificador"
+        ]),
+        termo: xmlBestText(node, [
+          "termo", "nome", "descricao", "descritor", "nomeTermo"
+        ]),
+        autorizado: xmlBestText(node, [
+          "autorizado", "termoAutorizado", "ehAutorizado"
+        ]),
+        ativo: xmlBestText(node, [
+          "ativo", "situacao", "status"
+        ]),
+        termoAnterior: xmlBestText(node, [
+          "termoAnterior", "nomeAnterior"
+        ]),
+        conceito: xmlBestText(node, ["conceito", "tq"]),
+        definicao: xmlBestText(node, ["definicao", "df"]),
+        notaExplicativa: xmlBestText(node, [
+          "notaExplicativa", "notaEscopo", "notaDeEscopo", "ne"
+        ]),
+        notaHistorica: xmlBestText(node, [
+          "notaHistorica", "notaUso", "notaDeUso", "nh"
+        ]),
+        classe: xmlBestText(node, ["classe", "categoria"]),
+        termoGeral,
+        termoGeralId: parentId || "",
+        termosEspecificos: xmlReferenceArray(especificosNode),
+        termosRelacionados: xmlReferenceArray(relacionadosNode),
+        termosNaoAutorizados: xmlReferenceArray(naoAutorizadosNode),
+        use: useNode ? xmlReference(useNode) : "",
+        hierarquia: xmlHierarchyPaths(node)
+      };
+    }
+
+    function extractTermRecordsFromXml(xml) {
+      const all = Array.from(xml.getElementsByTagName("*"));
+      const records = [];
+      const seen = new Set();
+
+      // A estrutura XML da API nem sempre deixa Numero e Termo como filhos
+      // diretos do mesmo elemento. O marcador confiavel do registro, usado
+      // inclusive no importador anterior da ALMG, e o filho direto
+      // <autorizado>. Depois de identificar esse elemento, procuramos Numero
+      // e Termo tanto diretamente quanto nos descendentes.
+      for (const node of all) {
+        const directAuthorized = xmlFieldText(node, [
+          "autorizado", "termoAutorizado", "ehAutorizado"
+        ]);
+
+        if (directAuthorized === "") {
+          continue;
+        }
+
+        const raw = xmlRecordToObject(node);
+
+        if (!String(raw.termo || "").trim()) {
+          continue;
+        }
+
+        const key = recordIdentity(raw);
+
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          records.push(raw);
+        }
+      }
+
+      return records;
+    }
+
+    // ---------------- JSON ----------------
+
+    function extractTermRecordsFromJson(payload) {
+      const records = [];
+      const seenObjects = new Set();
+      const seenRecords = new Set();
+
+      function walk(value, depth = 0) {
+        if (
+          value == null ||
+          typeof value !== "object" ||
+          depth > 8 ||
+          seenObjects.has(value)
+        ) {
+          return;
+        }
+
+        seenObjects.add(value);
+
+        if (!Array.isArray(value)) {
+          const numero = getField(value, [
+            "numero", "numdoc", "numeroDocumento", "numeroDoc",
+            "codigo", "cod", "controle", "id", "idTermo", "identificador"
+          ]);
+          const termo = getField(value, [
+            "termo", "nome", "descricao", "descritor", "nomeTermo"
+          ]);
+          const autorizado = getField(value, [
+            "autorizado", "termoAutorizado", "ehAutorizado"
+          ]);
+
+          if (
+            numero !== undefined &&
+            termo !== undefined &&
+            autorizado !== undefined
+          ) {
+            const key = recordIdentity(value);
+            if (key && !seenRecords.has(key)) {
+              seenRecords.add(key);
+              records.push(value);
+            }
+          }
+        }
+
+        for (const child of Object.values(value)) {
+          walk(child, depth + 1);
+        }
+      }
+
+      walk(payload);
+      return records;
+    }
+
+    // ============================================================
+    // ADAPTADOR API -> MODELO INTERNO DA PAGINA
+    // ============================================================
+
+    function splitHierarchyPath(value) {
+      const text = String(value || "").trim();
+      if (!text) return [];
+
+      let parts;
+
+      if (text.includes("→")) {
+        parts = text.split(/\s*→\s*/);
+      } else if (text.includes(" > ")) {
+        parts = text.split(/\s*>\s*/);
+      } else if (text.includes("|")) {
+        parts = text.split(/\s*\|\s*/);
+      } else {
+        parts = text.split(/\s*\/\s*/);
+      }
+
+      return parts
+        .map(part => String(part || "").trim())
+        .filter(Boolean)
+        .map(part =>
+          normalizeIcmgName(part) === "tesauro"
+            ? "Thesaurus"
+            : part
+        );
+    }
+
+    function criarNoHierarquicoPlaceholder(name, hintedNumber = null) {
+      const termo = String(name || "").trim();
+      const number = referenceNumber(hintedNumber);
+
+      return {
+        id: number
+          ? `icmg-${number}`
+          : `hier-${slugIcmg(termo)}`,
+        numdoc: number || null,
+        parentId: null,
+        termo,
+        termoAnterior: "",
+        conceito: "",
+        definicao: "",
+        notaEscopo: "",
+        notaUso: "",
+        relacionados: [],
+        relacionadosNaoAutorizados: [],
+        ativo: null,
+        _detailsLoaded: false,
+        _detailLoading: false,
+        _syntheticClass: false,
+        _hierarchyOnly: true,
+        _hierarchyPaths: []
+      };
+    }
+
+    function adaptarListaDaApi(rawTerms) {
+      const provisional = rawTerms
+        .map(raw => normalizarRegistroApi(raw, false))
+        .filter(Boolean);
+
+      // /lista nao deve ser interpretado como a arvore completa. Na resposta
+      // atual, ele devolve os termos diretamente listados e, nos proprios
+      // registros, caminhos de hierarquia que podem conter ancestrais que nao
+      // aparecem como registros independentes. Reconstruimos esses ancestrais
+      // antes de validar o snapshot.
+      const authorizedSeeds = provisional.filter(term =>
+        term._authorized === true
+      );
+
+      const nonAuthorized = provisional.filter(term =>
+        term._authorized === false
+      );
+
+      const seedByName = new Map();
+      const duplicateNames = new Set();
+      const knownIdByName = new Map();
+      const idConflicts = new Set();
+      const pathLabelByName = new Map();
+      const parentNameByChildName = new Map();
+      const parentPathConflicts = new Set();
+      const pathNames = new Set();
+      let hierarchyPathCount = 0;
+
+      function canonicalLabel(value) {
+        let label = referenceLabel(value);
+
+        if (
+          !label &&
+          (typeof value === "string" || typeof value === "number")
+        ) {
+          label = String(value || "").trim();
+        }
+
+        if (!label) return "";
+
+        return normalizeIcmgName(label) === "tesauro"
+          ? "Thesaurus"
+          : label;
+      }
+
+      function registerKnownId(labelValue, refValue) {
+        const label = canonicalLabel(labelValue);
+        const number = referenceNumber(refValue);
+        const key = normalizeIcmgName(label);
+
+        if (!key || !number) return;
+
+        const current = knownIdByName.get(key);
+        if (current && current !== number) {
+          idConflicts.add(label);
+          return;
+        }
+
+        knownIdByName.set(key, number);
+      }
+
+      function registerReference(ref) {
+        if (ref == null || ref === "") return;
+
+        if (Array.isArray(ref)) {
+          ref.forEach(registerReference);
+          return;
+        }
+
+        // Uma referencia textual numerica pode ser o proprio nome do termo
+        // (por exemplo "2011"), e nao seu identificador. So inferimos
+        // nome -> id quando a API forneceu uma referencia estruturada.
+        if (typeof ref !== "object") return;
+
+        const label = canonicalLabel(ref);
+        if (label) registerKnownId(label, ref);
+      }
+
+      for (const seed of authorizedSeeds) {
+        const key = normalizeIcmgName(seed.termo);
+
+        if (seedByName.has(key)) {
+          duplicateNames.add(seed.termo);
+        } else {
+          seedByName.set(key, seed);
+        }
+
+        registerKnownId(seed.termo, seed.numdoc);
+        registerReference(seed._parentReference);
+        registerReference(seed._specificReferences);
+        registerReference(seed._relatedReferences);
+
+        for (const path of seed._hierarchyPaths || []) {
+          const parts = splitHierarchyPath(path);
+          if (!parts.length) continue;
+
+          hierarchyPathCount += 1;
+
+          for (const part of parts) {
+            const keyPart = normalizeIcmgName(part);
+            if (!keyPart) continue;
+            pathNames.add(keyPart);
+            if (!pathLabelByName.has(keyPart)) {
+              pathLabelByName.set(keyPart, part);
+            }
+          }
+
+          for (let i = 1; i < parts.length; i += 1) {
+            const parentLabel = parts[i - 1];
+            const childLabel = parts[i];
+            const childKey = normalizeIcmgName(childLabel);
+            const parentKeyName = normalizeIcmgName(parentLabel);
+
+            if (!childKey || !parentKeyName || childKey === parentKeyName) {
+              continue;
+            }
+
+            const existing = parentNameByChildName.get(childKey);
+
+            if (
+              existing &&
+              normalizeIcmgName(existing) !== parentKeyName
+            ) {
+              parentPathConflicts.add(childLabel);
+            } else if (!existing) {
+              parentNameByChildName.set(childKey, parentLabel);
+            }
+          }
+        }
+      }
+
+      // Quando a referencia TG traz apenas o identificador, o caminho da
+      // hierarquia fornece o nome do pai. Cruzamos as duas informacoes para
+      // preservar o id real do ancestral e permitir /{numdoc} sob demanda.
+      for (const seed of authorizedSeeds) {
+        const seedKey = normalizeIcmgName(seed.termo);
+        const parentFromPath = parentNameByChildName.get(seedKey);
+        const parentRefNumber = referenceNumber(seed._parentReference);
+        const parentRefLabel = canonicalLabel(seed._parentReference);
+
+        if (parentFromPath && parentRefNumber) {
+          registerKnownId(parentFromPath, parentRefNumber);
+        }
+
+        if (parentRefLabel && parentRefNumber) {
+          registerKnownId(parentRefLabel, parentRefNumber);
+        }
+      }
+
+      const allNames = new Map();
+
+      function registerNodeName(value) {
+        const label = canonicalLabel(value);
+        const key = normalizeIcmgName(label);
+        if (!key) return;
+
+        if (!allNames.has(key)) {
+          allNames.set(key, label);
+        }
+      }
+
+      for (const seed of authorizedSeeds) {
+        registerNodeName(seed.termo);
+
+        const parentLabel = canonicalLabel(seed._parentReference);
+        if (parentLabel) registerNodeName(parentLabel);
+      }
+
+      for (const [key, label] of pathLabelByName) {
+        if (!allNames.has(key)) allNames.set(key, label);
+      }
+
+      // Se os caminhos comecarem diretamente nos quatro ramos principais,
+      // o endpoint pode nao repetir o no estrutural "Thesaurus". Criamos
+      // apenas esse no-raiz conhecido, sem inventar outros ancestrais.
+      const topBranchKeys = EXPECTED_TOP_BRANCHES.map(normalizeIcmgName);
+      const hasAllTopBranches = topBranchKeys.every(key => allNames.has(key));
+      const thesaurusKey = normalizeIcmgName("Thesaurus");
+
+      if (!allNames.has(thesaurusKey) && hasAllTopBranches) {
+        allNames.set(thesaurusKey, "Thesaurus");
+      }
+
+      const terms = [];
+      const byName = new Map();
+      const byId = new Map();
+      let recoveredHierarchyNodes = 0;
+      let recoveredNodesWithReferencedId = 0;
+
+      for (const [nameKey, fallbackLabel] of allNames) {
+        const seed = seedByName.get(nameKey);
+        let term;
+
+        if (seed) {
+          term = seed;
+          term._hierarchyOnly = false;
+        } else {
+          const hintedNumber = knownIdByName.get(nameKey) || null;
+          term = criarNoHierarquicoPlaceholder(
+            fallbackLabel,
+            hintedNumber
+          );
+          recoveredHierarchyNodes += 1;
+          if (hintedNumber) recoveredNodesWithReferencedId += 1;
+        }
+
+        // Evita colisao de ids caso o servidor reutilize um identificador
+        // inesperadamente. O nome autorizado e unico no snapshot de referencia.
+        if (byId.has(String(term.id))) {
+          term.id = `hier-${slugIcmg(term.termo)}-${terms.length + 1}`;
+          if (term._hierarchyOnly) term.numdoc = null;
+        }
+
+        terms.push(term);
+        byName.set(nameKey, term);
+        byId.set(String(term.id), term);
+      }
+
+      function resolveAgainstAll(ref) {
+        if (ref == null || ref === "") return null;
+
+        const label = canonicalLabel(ref);
+        if (label) {
+          const foundByName = byName.get(normalizeIcmgName(label));
+          if (foundByName) return foundByName;
+        }
+
+        const number = referenceNumber(ref);
+        if (number) {
+          return byId.get(`icmg-${number}`) || null;
+        }
+
+        return null;
+      }
+
+      // 1) Caminhos da API definem a estrutura dos nos recuperados.
+      for (const term of terms) {
+        const parentLabel = parentNameByChildName.get(
+          normalizeIcmgName(term.termo)
+        );
+
+        if (!parentLabel) continue;
+
+        const parent = byName.get(normalizeIcmgName(parentLabel));
+        if (parent && parent.id !== term.id) {
+          term.parentId = parent.id;
+        }
+      }
+
+      // 2) TG explicito do registro tem prioridade sobre o caminho.
+      for (const seed of authorizedSeeds) {
+        const target = byName.get(normalizeIcmgName(seed.termo));
+        if (!target) continue;
+
+        const parent = resolveAgainstAll(seed._parentReference);
+
+        if (parent && parent.id !== target.id) {
+          target.parentId = parent.id;
+        } else {
+          const parentFromPath = parentNameByChildName.get(
+            normalizeIcmgName(target.termo)
+          );
+
+          if (parentFromPath) {
+            const pathParent = byName.get(
+              normalizeIcmgName(parentFromPath)
+            );
+            if (pathParent && pathParent.id !== target.id) {
+              target.parentId = pathParent.id;
+            }
+          }
+        }
+      }
+
+      // 3) TE e uma confirmacao/fallback. Nunca substitui TG ou caminho.
+      for (const seedParent of authorizedSeeds) {
+        const parent = byName.get(normalizeIcmgName(seedParent.termo));
+        if (!parent) continue;
+
+        for (const childRef of seedParent._specificReferences || []) {
+          const child = resolveAgainstAll(childRef);
+
+          if (
+            child &&
+            child.id !== parent.id &&
+            !child.parentId
+          ) {
+            child.parentId = parent.id;
+          }
+        }
+      }
+
+      // 4) Completa apenas a ligacao conhecida dos quatro ramos principais
+      // quando a API omitiu o registro-raiz dos resultados de /lista.
+      const root = byName.get(thesaurusKey);
+
+      if (root) {
+        root.parentId = null;
+
+        for (const branchName of EXPECTED_TOP_BRANCHES) {
+          const branch = byName.get(normalizeIcmgName(branchName));
+          if (branch && !branch.parentId) {
+            branch.parentId = root.id;
+          }
+        }
+      }
+
+      // Relacoes associativas dos registros diretamente devolvidos pela API.
+      for (const seed of authorizedSeeds) {
+        const target = byName.get(normalizeIcmgName(seed.termo));
+        if (!target) continue;
+
+        const relatedIds = [];
+
+        for (const ref of seed._relatedReferences || []) {
+          const related = resolveAgainstAll(ref);
+
+          if (
+            related &&
+            related.id !== target.id &&
+            !relatedIds.includes(related.id)
+          ) {
+            relatedIds.push(related.id);
+          }
+        }
+
+        target.relacionados = relatedIds;
+      }
+
+      // UP ja embutidos nos registros autorizados sao preservados; registros
+      // nao autorizados independentes tambem podem apontar via USE.
+      for (const up of nonAuthorized) {
+        const target = resolveAgainstAll(up._useReference);
+
+        if (
+          target &&
+          up.termo &&
+          !target.relacionadosNaoAutorizados.includes(up.termo)
+        ) {
+          target.relacionadosNaoAutorizados.push(up.termo);
+        }
+      }
+
+      for (const term of terms) {
+        if (seedByName.has(normalizeIcmgName(term.termo))) {
+          cleanupInternalApiFields(term);
+        }
+      }
+
+      return {
+        terms,
+        stats: {
+          directAuthorizedRecords: authorizedSeeds.length,
+          nonAuthorizedRecords: nonAuthorized.length,
+          hierarchyPathCount,
+          hierarchyNamesFound: pathNames.size,
+          recoveredHierarchyNodes,
+          recoveredNodesWithReferencedId,
+          hierarchyIdConflicts: idConflicts.size,
+          hierarchyParentConflicts: parentPathConflicts.size,
+          duplicateAuthorizedNames: duplicateNames.size
+        }
+      };
+    }
+
+    function validarEstruturaThesaurus(terms, previousTerms = []) {
+      const errors = [];
+      const warnings = [];
+      const byId = new Map();
+      const byName = new Map();
+      const duplicateIds = [];
+      const duplicateNames = [];
+
+      for (const term of terms) {
+        const id = String(term.id);
+        const name = normalizeIcmgName(term.termo);
+
+        if (byId.has(id)) duplicateIds.push(id);
+        else byId.set(id, term);
+
+        if (byName.has(name)) duplicateNames.push(term.termo);
+        else byName.set(name, term);
+      }
+
+      const descriptors = terms.length;
+      const activeDescriptors = terms.filter(term => term.ativo === true).length;
+      const inactiveDescriptors = terms.filter(term => term.ativo === false).length;
+
+      let previousDescriptorCount = 0;
+      if (Array.isArray(previousTerms) && previousTerms.length) {
+        previousDescriptorCount = previousTerms.length;
+      }
+
+      const minimumByPrevious = previousDescriptorCount
+        ? Math.floor(previousDescriptorCount * 0.9)
+        : 0;
+
+      const minimumAccepted = Math.max(
+        MIN_EXPECTED_AUTHORIZED_TERMS,
+        minimumByPrevious
+      );
+
+      if (descriptors < minimumAccepted) {
+        errors.push(
+          `foram reconhecidos ${descriptors.toLocaleString("pt-BR")} descritores; ` +
+          `o mínimo de segurança atual é ${minimumAccepted.toLocaleString("pt-BR")}`
+        );
+      }
+
+      if (duplicateIds.length) {
+        errors.push(`${duplicateIds.length} identificador(es) duplicado(s)`);
+      }
+
+      if (duplicateNames.length || terms._duplicateNames?.length) {
+        const count = Math.max(
+          duplicateNames.length,
+          terms._duplicateNames?.length || 0
+        );
+        errors.push(`${count} nome(s) de descritor duplicado(s)`);
+      }
+
+      const root = byName.get(normalizeIcmgName("Thesaurus"));
+
+      if (!root) {
+        errors.push('o descritor-raiz "Thesaurus" não foi localizado');
+      } else if (root.parentId) {
+        errors.push('o descritor-raiz "Thesaurus" apareceu com TermoGeral');
+      }
+
+      const roots = terms.filter(term => !term.parentId);
+
+      if (roots.length !== 1 || roots[0]?.id !== root?.id) {
+        errors.push(
+          `foram encontrados ${roots.length.toLocaleString("pt-BR")} nó(s) raiz; ` +
+          'o esperado é apenas "Thesaurus"'
+        );
+      }
+
+      if (root) {
+        for (const branchName of EXPECTED_TOP_BRANCHES) {
+          const branch = byName.get(normalizeIcmgName(branchName));
+
+          if (!branch) {
+            errors.push(`o ramo principal "${branchName}" não foi localizado`);
+          } else if (branch.parentId !== root.id) {
+            errors.push(`o ramo principal "${branchName}" não está subordinado a "Thesaurus"`);
+          }
+        }
+      }
+
+      const orphans = terms.filter(term =>
+        term.id !== root?.id &&
+        (!term.parentId || !byId.has(String(term.parentId)))
+      );
+
+      if (orphans.length) {
+        const sample = orphans.slice(0, 5).map(term => term.termo).join(", ");
+        errors.push(
+          `${orphans.length.toLocaleString("pt-BR")} descritor(es) ficaram órfãos` +
+          (sample ? ` (ex.: ${sample})` : "")
+        );
+      }
+
+      // Detecta ciclos no encadeamento TG.
+      let cycleCount = 0;
+
+      for (const term of terms) {
+        const path = new Set();
+        let current = term;
+
+        while (current) {
+          if (path.has(current.id)) {
+            cycleCount += 1;
+            break;
+          }
+
+          path.add(current.id);
+          current = current.parentId
+            ? byId.get(String(current.parentId)) || null
+            : null;
+        }
+      }
+
+      if (cycleCount) {
+        errors.push(`${cycleCount.toLocaleString("pt-BR")} ciclo(s) hierárquico(s) detectado(s)`);
+      }
+
+      const mappedRemissives = new Set();
+      for (const term of terms) {
+        for (const up of term.relacionadosNaoAutorizados || []) {
+          const key = normalizeIcmgName(up);
+          if (key) mappedRemissives.add(key);
+        }
+      }
+
+      if (!mappedRemissives.size) {
+        warnings.push(
+          "nenhuma remissiva UP foi mapeada na lista; elas poderão ser obtidas nos detalhes por numdoc"
+        );
+      }
+
+      if (warnings.length) {
+        console.warn("Avisos de validação do Thesaurus:", warnings);
+      }
+
+      return {
+        ok: errors.length === 0,
+        errors,
+        warnings,
+        descriptors,
+        activeDescriptors,
+        inactiveDescriptors,
+        mappedRemissives: mappedRemissives.size,
+        roots: roots.map(term => term.termo),
+        orphanCount: orphans.length
+      };
+    }
+
+    function normalizarRegistroApi(raw, fromDetail) {
+      if (!raw || typeof raw !== "object") {
+        return null;
+      }
+
+      const numeroValue = getField(raw, [
+        "numero",
+        "numdoc",
+        "numeroDocumento",
+        "numeroDoc",
+        "codigo",
+        "cod",
+        "controle",
+        "id",
+        "idTermo",
+        "identificador"
+      ]);
+
+      const termoValue = getField(raw, [
+        "termo",
+        "nome",
+        "descricao",
+        "descritor",
+        "nomeTermo"
+      ]);
+
+      const termo = referenceLabel(termoValue);
+
+      if (!termo) {
+        return null;
+      }
+
+      const numero = referenceNumber(numeroValue) ||
+        referenceNumber(raw) ||
+        null;
+
+      const autorizadoValue = getField(raw, [
+        "autorizado",
+        "termoAutorizado",
+        "ehAutorizado"
+      ]);
+
+      const ativoValue = getField(raw, [
+        "ativo",
+        "situacao",
+        "status"
+      ]);
+
+      const parentReferenceValue = getFieldDeep(raw, [
+        "termoGeral",
+        "termosGerais",
+        "termoGenerico",
+        "termosGenericos",
+        "termoPai",
+        "termoSuperior",
+        "pai",
+        "ascendente",
+        "broaderTerm",
+        "broaderTerms",
+        "tg"
+      ]);
+
+      const parentIdValue = getFieldDeep(raw, [
+        "termoPaiId",
+        "idTermoPai",
+        "termoGeralId",
+        "idTermoGeral",
+        "idPai",
+        "paiId",
+        "idAscendente",
+        "ascendenteId"
+      ]);
+
+      let parentReference = parentReferenceValue;
+
+      if (parentIdValue !== undefined && parentIdValue !== null && parentIdValue !== "") {
+        parentReference = {
+          numero: referenceNumber(parentIdValue) || String(parentIdValue).trim(),
+          termo: referenceLabel(parentReferenceValue)
+        };
+      }
+
+      const specificReferences = normalizeReferenceArray(
+        getFieldDeep(raw, [
+          "termosEspecificos",
+          "termoEspecifico",
+          "termosFilhos",
+          "filhos",
+          "descendentes",
+          "narrowerTerms",
+          "te"
+        ])
+      );
+
+      const relatedReferences = normalizeReferenceArray(
+        getFieldDeep(raw, [
+          "termosRelacionados",
+          "termoRelacionado",
+          "relacionados",
+          "relatedTerms",
+          "tr"
+        ])
+      );
+
+      const unauthorizedValues = normalizeReferenceArray(
+        getFieldDeep(raw, [
+          "termosNaoAutorizados",
+          "termoNaoAutorizado",
+          "naoAutorizados",
+          "naoAutorizado",
+          "usadoPor",
+          "usadosPor",
+          "useFor",
+          "sinonimos",
+          "up"
+        ])
+      )
+        .map(referenceLabel)
+        .filter(Boolean);
+
+      const useReference = getFieldDeep(raw, [
+        "use",
+        "usar",
+        "termoPreferido",
+        "descritorAutorizado",
+        "termoAutorizadoReferencia"
+      ]);
+
+      const hierarchyPaths = extractHierarchyPaths(raw);
+
+      const detailsLoaded = Boolean(fromDetail) || hasAnyField(raw, [
+        "definicao",
+        "notaExplicativa",
+        "notaHistorica",
+        "termosRelacionados",
+        "termosEspecificos",
+        "termosNaoAutorizados",
+        "naoAutorizados",
+        "usadoPor"
+      ]);
+
+      return {
+        id: numero != null
+          ? `icmg-${String(numero)}`
+          : `icmg-${slugIcmg(termo)}`,
+        numdoc: numero != null ? String(numero) : null,
+        parentId: null,
+        termo,
+        termoAnterior: textValue(
+          getField(raw, [
+            "termoAnterior",
+            "nomeAnterior"
+          ])
+        ),
+        conceito: textValue(
+          getField(raw, [
+            "conceito",
+            "tq"
+          ])
+        ),
+        definicao: textValue(
+          getField(raw, ["definicao", "df"])
+        ),
+        notaEscopo: textValue(
+          getField(raw, [
+            "notaExplicativa",
+            "notaEscopo",
+            "ne"
+          ])
+        ),
+        notaUso: textValue(
+          getField(raw, [
+            "notaHistorica",
+            "notaUso",
+            "nh"
+          ])
+        ),
+        relacionados: [],
+        relacionadosNaoAutorizados: Array.from(
+          new Set(unauthorizedValues)
+        ),
+        _authorized: parseYesNo(autorizadoValue, true),
+        ativo: parseActive(ativoValue),
+        _active: parseActive(ativoValue),
+        _classe: textValue(
+          getField(raw, ["classe", "categoria"])
+        ),
+        _parentReference: parentReference,
+        _specificReferences: specificReferences,
+        _relatedReferences: relatedReferences,
+        _useReference: useReference,
+        _hierarchyPaths: hierarchyPaths,
+        _detailsLoaded: detailsLoaded,
+        _detailLoading: false,
+        _syntheticClass: false
+      };
+    }
+
+    function cleanupInternalApiFields(term) {
+      delete term._authorized;
+      delete term._active;
+      delete term._classe;
+      delete term._parentReference;
+      delete term._specificReferences;
+      delete term._relatedReferences;
+      delete term._useReference;
+      // _hierarchyPaths e mantido temporariamente ate a montagem final da arvore.
+    }
+
+    function getFieldDeep(obj, aliases, maxDepth = 4) {
+      const direct = getField(obj, aliases);
+      if (direct !== undefined) return direct;
+
+      const wanted = new Set(aliases.map(normalizeObjectKey));
+      const visited = new Set();
+
+      function walk(value, depth) {
+        if (
+          value == null ||
+          typeof value !== "object" ||
+          depth > maxDepth ||
+          visited.has(value)
+        ) {
+          return undefined;
+        }
+
+        visited.add(value);
+
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            const found = walk(item, depth + 1);
+            if (found !== undefined) return found;
+          }
+          return undefined;
+        }
+
+        for (const [key, child] of Object.entries(value)) {
+          if (wanted.has(normalizeObjectKey(key))) {
+            return child;
+          }
+        }
+
+        for (const child of Object.values(value)) {
+          const found = walk(child, depth + 1);
+          if (found !== undefined) return found;
+        }
+
+        return undefined;
+      }
+
+      return walk(obj, 0);
+    }
+
+    function extractHierarchyPaths(raw) {
+      const results = [];
+      const visited = new Set();
+
+      function isHierarchyKey(key) {
+        const normalized = normalizeObjectKey(key);
+        return (
+          normalized.includes("hierarquia") ||
+          normalized.includes("caminho") ||
+          normalized === "path" ||
+          normalized === "paths"
+        );
+      }
+
+      function addPath(value) {
+        const text = String(value || "").trim();
+        if (!text) return;
+
+        if (
+          text.includes("/") ||
+          text.includes(" > ") ||
+          text.includes("→") ||
+          text.includes("|")
+        ) {
+          results.push(text);
+        }
+      }
+
+      function labelsFromArray(items) {
+        const strings = items
+          .filter(item => typeof item === "string")
+          .map(item => String(item || "").trim())
+          .filter(Boolean);
+
+        const completePaths = strings.filter(item =>
+          item.includes("/") ||
+          item.includes(" > ") ||
+          item.includes("→") ||
+          item.includes("|")
+        );
+
+        if (completePaths.length) {
+          completePaths.forEach(addPath);
+          return true;
+        }
+
+        const labels = items
+          .map(item => referenceLabel(item))
+          .map(item => String(item || "").trim())
+          .filter(Boolean);
+
+        if (labels.length > 1) {
+          results.push(labels.join(" / "));
+          return true;
+        }
+
+        return false;
+      }
+
+      function walk(value, key = "", depth = 0) {
+        if (
+          value == null ||
+          depth > 5 ||
+          (typeof value === "object" && visited.has(value))
+        ) {
+          return;
+        }
+
+        if (typeof value === "string") {
+          if (isHierarchyKey(key)) addPath(value);
+          return;
+        }
+
+        if (typeof value !== "object") return;
+        visited.add(value);
+
+        if (Array.isArray(value)) {
+          if (isHierarchyKey(key) && labelsFromArray(value)) return;
+          value.forEach(item => walk(item, key, depth + 1));
+          return;
+        }
+
+        for (const [childKey, child] of Object.entries(value)) {
+          if (isHierarchyKey(childKey)) {
+            if (typeof child === "string") {
+              addPath(child);
+            } else if (Array.isArray(child)) {
+              if (!labelsFromArray(child)) {
+                child.forEach(item => walk(item, childKey, depth + 1));
+              }
+            } else {
+              walk(child, childKey, depth + 1);
+            }
+          } else {
+            walk(child, childKey, depth + 1);
+          }
+        }
+      }
+
+      walk(raw);
+      return Array.from(new Set(results));
+    }
+
+    function getField(obj, aliases) {
+      if (!obj || typeof obj !== "object") {
+        return undefined;
+      }
+
+      const index = new Map(
+        Object.keys(obj).map(key => [
+          normalizeObjectKey(key),
+          key
+        ])
+      );
+
+      for (const alias of aliases) {
+        const realKey = index.get(
+          normalizeObjectKey(alias)
+        );
+
+        if (realKey !== undefined) {
+          return obj[realKey];
+        }
+      }
+
+      return undefined;
+    }
+
+    function hasAnyField(obj, aliases) {
+      if (!obj || typeof obj !== "object") {
+        return false;
+      }
+
+      const keys = new Set(
+        Object.keys(obj).map(normalizeObjectKey)
+      );
+
+      return aliases.some(alias =>
+        keys.has(normalizeObjectKey(alias))
+      );
+    }
+
+    function normalizeObjectKey(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .toLowerCase();
+    }
+
+    function textValue(value) {
+      if (value == null) {
+        return "";
+      }
+
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+      ) {
+        return String(value).trim();
+      }
+
+      if (Array.isArray(value)) {
+        return value
+          .map(textValue)
+          .filter(Boolean)
+          .join("\n\n");
+      }
+
+      if (typeof value === "object") {
+        return referenceLabel(value);
+      }
+
+      return "";
+    }
+
+    function normalizeReferenceArray(value) {
+      if (value == null || value === "") {
+        return [];
+      }
+
+      if (Array.isArray(value)) {
+        return value;
+      }
+
+      if (typeof value === "object") {
+        for (const key of [
+          "termos",
+          "itens",
+          "items",
+          "lista",
+          "content",
+          "dados"
+        ]) {
+          const nested = getField(value, [key]);
+          if (Array.isArray(nested)) {
+            return nested;
+          }
+        }
+      }
+
+      if (typeof value === "string" && value.includes(";")) {
+        return value
+          .split(";")
+          .map(item => item.trim())
+          .filter(Boolean);
+      }
+
+      return [value];
+    }
+
+    function referenceNumber(value) {
+      if (value == null) {
+        return null;
+      }
+
+      if (
+        typeof value === "number" ||
+        (typeof value === "string" && /^\d+$/.test(value.trim()))
+      ) {
+        return String(value).trim();
+      }
+
+      if (typeof value === "object") {
+        const nested = getField(value, [
+          "numero",
+          "numdoc",
+          "numeroDocumento",
+          "numeroDoc",
+          "codigo",
+          "cod",
+          "controle",
+          "id",
+          "idTermo",
+          "identificador",
+          "termoId"
+        ]);
+
+        if (nested !== undefined && nested !== value) {
+          return referenceNumber(nested);
+        }
+      }
+
+      return null;
+    }
+
+    function referenceLabel(value) {
+      if (value == null) {
+        return "";
+      }
+
+      if (
+        typeof value === "string" ||
+        typeof value === "number"
+      ) {
+        return String(value).trim();
+      }
+
+      if (typeof value === "object") {
+        const nested = getField(value, [
+          "termo",
+          "nome",
+          "descricao",
+          "descritor",
+          "nomeTermo",
+          "descricaoTermo",
+          "valor",
+          "label"
+        ]);
+
+        if (nested !== undefined && nested !== value) {
+          return referenceLabel(nested);
+        }
+      }
+
+      return "";
+    }
+
+    function parseYesNo(value, defaultValue = true) {
+      if (value == null || value === "") {
+        return defaultValue;
+      }
+
+      if (typeof value === "boolean") {
+        return value;
+      }
+
+      const normalized = normalizeIcmgName(value);
+
+      if (["sim", "s", "true", "1", "autorizado"].includes(normalized)) {
+        return true;
+      }
+
+      if (["nao", "n", "false", "0", "nao autorizado"].includes(normalized)) {
+        return false;
+      }
+
+      return defaultValue;
+    }
+
+    function parseActive(value) {
+      if (value == null || value === "") {
+        return null;
+      }
+
+      const normalized = normalizeIcmgName(value);
+
+      if (["sim", "s", "true", "1", "ativo", "ativa"].includes(normalized)) {
+        return true;
+      }
+
+      if (["nao", "n", "false", "0", "inativo", "inativa"].includes(normalized)) {
+        return false;
+      }
+
+      return null;
+    }
+
+    function resolveReferenceToTerm(ref, byId, byName) {
+      if (ref == null || ref === "") {
+        return null;
+      }
+
+      if (Array.isArray(ref)) {
+        for (const item of ref) {
+          const resolved = resolveReferenceToTerm(item, byId, byName);
+          if (resolved) return resolved;
+        }
+        return null;
+      }
+
+      const number = referenceNumber(ref);
+
+      if (number != null) {
+        const byNumber = byId.get(`icmg-${number}`);
+        if (byNumber) {
+          return byNumber;
+        }
+      }
+
+      const label = referenceLabel(ref);
+
+      if (label) {
+        return byName.get(normalizeIcmgName(label)) || null;
+      }
+
+      return null;
+    }
+
+    // ============================================================
+    // DETALHE POR NUMDOC - SOB DEMANDA E COM CACHE
+    // ============================================================
+
+    async function carregarDetalhesSeNecessario(term) {
+      if (
+        !term ||
+        term._detailsLoaded ||
+        term._detailLoading ||
+        !term.numdoc
+      ) {
+        return;
+      }
+
+      term._detailLoading = true;
+
+      if (state.selectedId === term.id) {
+        setStatus(
+          `${state.terms.length.toLocaleString("pt-BR")} descritor(es) | carregando detalhes...`
+        );
+      }
+
+      try {
+        const response = await apiFetchStructuredWithRetry(
+          API_TERM_URL(term.numdoc),
+          2
+        );
+
+        const raw = extractFirstStructuredTerm(response);
+        const detail = normalizarRegistroApi(raw, true);
+
+        if (!detail) {
+          throw new Error("Detalhe do termo nao reconhecido.");
+        }
+
+        mergeTermDetail(term, detail);
+        term._detailsLoaded = true;
+        scheduleCacheSave();
+
+        if (state.selectedId === term.id) {
+          renderTermArea();
+
+          const cached = await readCache().catch(() => null);
+          setReadyStatus(
+            cached?.updatedAt || new Date().toISOString(),
+            "cache"
+          );
+        }
+      } catch (error) {
+        console.warn(
+          `Nao foi possivel carregar detalhes de ${term.termo}.`,
+          error
+        );
+
+        term._detailsLoaded = false;
+
+        if (state.selectedId === term.id) {
+          setStatus(
+            `${state.terms.length.toLocaleString("pt-BR")} descritor(es) | detalhe indisponível`
+          );
+        }
+      } finally {
+        term._detailLoading = false;
+      }
+    }
+
+    function buildResolutionMaps(terms) {
+      const byId = new Map();
+      const byName = new Map();
+
+      for (const term of terms) {
+        byId.set(String(term.id), term);
+        const key = normalizeIcmgName(term.termo);
+        if (key && !byName.has(key)) byName.set(key, term);
+      }
+
+      return { byId, byName };
+    }
+
+    function mergeTermDetail(
+      target,
+      detail,
+      {
+        byId = termById,
+        byName = termByName,
+        rebuild = true
+      } = {}
+    ) {
+      target.termo = detail.termo || target.termo;
+      target.numdoc = detail.numdoc || target.numdoc || null;
+      target._hierarchyOnly = false;
+      target.termoAnterior =
+        detail.termoAnterior || target.termoAnterior || "";
+      target.conceito = detail.conceito || target.conceito || "";
+      target.definicao = detail.definicao || target.definicao || "";
+      target.notaEscopo = detail.notaEscopo || target.notaEscopo || "";
+      target.notaUso = detail.notaUso || target.notaUso || "";
+      if (detail.ativo !== null && detail.ativo !== undefined) {
+        target.ativo = detail.ativo;
+      }
+
+      if (detail.relacionadosNaoAutorizados.length) {
+        target.relacionadosNaoAutorizados = Array.from(
+          new Set([
+            ...(target.relacionadosNaoAutorizados || []),
+            ...detail.relacionadosNaoAutorizados
+          ])
+        );
+      }
+
+      const parent = resolveReferenceToTerm(
+        detail._parentReference,
+        byId,
+        byName
+      );
+
+      if (parent && parent.id !== target.id) {
+        target.parentId = parent.id;
+      }
+
+      const relatedIds = [];
+
+      for (const ref of detail._relatedReferences || []) {
+        const related = resolveReferenceToTerm(
+          ref,
+          byId,
+          byName
+        );
+
+        if (
+          related &&
+          related.id !== target.id &&
+          !relatedIds.includes(related.id)
+        ) {
+          relatedIds.push(related.id);
+        }
+      }
+
+      if (relatedIds.length) {
+        target.relacionados = relatedIds;
+      }
+
+      // TE tambem ajuda a reconstruir a hierarquia quando o detalhe do
+      // proprio filho nao explicita TG.
+      for (const ref of detail._specificReferences || []) {
+        const child = resolveReferenceToTerm(ref, byId, byName);
+
+        if (
+          child &&
+          child.id !== target.id &&
+          !child.parentId
+        ) {
+          child.parentId = target.id;
+        }
+      }
+
+      target._hierarchyPaths = Array.from(
+        new Set([
+          ...(target._hierarchyPaths || []),
+          ...(detail._hierarchyPaths || [])
+        ])
+      );
+
+      target._detailsLoaded = true;
+
+      if (rebuild) {
+        buildIndexes();
+      }
+    }
+
+    function setStatus(message) {
+      headerStatus.textContent = message || "";
+    }
+
+    function parentKey(parentId) {
+      return parentId
+        ? String(parentId)
+        : "__ROOT__";
+    }
+
+    function buildIndexes() {
+      termById = new Map();
+      termByName = new Map();
+      childrenByParent = new Map();
+      termPathCache = new Map();
+
+      for (const term of state.terms) {
+        termById.set(
+          String(term.id),
+          term
+        );
+
+        const nameKey = normalizeIcmgName(term.termo);
+        if (nameKey && !termByName.has(nameKey)) {
+          termByName.set(nameKey, term);
+        }
+
+        const key = parentKey(term.parentId);
+
+        if (!childrenByParent.has(key)) {
+          childrenByParent.set(key, []);
+        }
+
+        childrenByParent
+          .get(key)
+          .push(term);
+      }
+
+      for (const children of childrenByParent.values()) {
+        children.sort((a, b) =>
+          displayTermName(a).localeCompare(
+            displayTermName(b),
+            "pt-BR"
+          )
+        );
+      }
+    }
+
+    function getTerm(id) {
+      if (!id) {
+        return null;
+      }
+
+      return (
+        termById.get(String(id)) ||
+        null
+      );
+    }
+
+    function childrenOf(parentId) {
+      return (
+        childrenByParent.get(
+          parentKey(parentId)
+        ) || []
+      );
+    }
+
+    function visibleRootTerms() {
+      const thesaurusRoot = termByName.get(
+        normalizeIcmgName("Thesaurus")
+      );
+
+      if (thesaurusRoot) {
+        return childrenOf(thesaurusRoot.id);
+      }
+
+      return childrenOf(null);
+    }
+
+    function rootTermIds() {
+      return visibleRootTerms().map(term => term.id);
+    }
+
+    function firstSelectableTermId() {
+      const roots = visibleRootTerms();
+      return roots.length ? roots[0].id : null;
+    }
+
+    function displayTermName(term) {
+      if (!term) {
+        return "";
+      }
+
+      if (
+        term.termoAnterior &&
+        term.termoAnterior !== term.termo
+      ) {
+        return `${term.termo} (${term.termoAnterior})`;
+      }
+
+      return term.termo;
+    }
+
+    function termPath(term) {
+      if (!term) {
+        return "";
+      }
+
+      const cacheKey = String(term.id);
+
+      if (termPathCache.has(cacheKey)) {
+        return termPathCache.get(cacheKey);
+      }
+
+      const parts = [];
+      let current = term;
+      const guard = new Set();
+
+      while (
+        current &&
+        !guard.has(current.id)
+      ) {
+        guard.add(current.id);
+
+        if (normalizeIcmgName(current.termo) !== "thesaurus") {
+          parts.push(displayTermName(current));
+        }
+
+        current = getTerm(current.parentId);
+      }
+
+      const path = parts
+        .reverse()
+        .join(" / ");
+
+      termPathCache.set(
+        cacheKey,
+        path
+      );
+
+      return path;
+    }
+
+    function openTerm(
+      id,
+      updateHash = true
+    ) {
+      const term = getTerm(id);
+
+      if (!term) {
+        return;
+      }
+
+      state.selectedId = term.id;
+
+      expandAncestors(term.id);
+      render();
+
+      if (updateHash) {
+        history.replaceState(
+          null,
+          "",
+          `#${encodeURIComponent(term.id)}`
+        );
+      }
+
+      carregarDetalhesSeNecessario(term);
+    }
+
+    function expandAncestors(termId) {
+      let current = getTerm(termId);
+      const guard = new Set();
+
+      while (
+        current &&
+        current.parentId &&
+        !guard.has(current.id)
+      ) {
+        guard.add(current.id);
+
+        if (
+          !state.expanded.includes(
+            current.parentId
+          )
+        ) {
+          state.expanded.push(
+            current.parentId
+          );
+        }
+
+        current = getTerm(
+          current.parentId
+        );
+      }
+    }
+
+    function render() {
+      buildIndexes();
+      renderTree();
+      renderTermArea();
+    }
+
+    function renderTree() {
+      const query =
+        searchInput.value.trim();
+
+      treeEl.innerHTML = "";
+
+      const roots = visibleRootTerms();
+
+      if (!roots.length) {
+        treeEl.innerHTML =
+          '<div class="empty">Nenhum termo cadastrado.</div>';
+
+        return;
+      }
+
+      let renderedCount = 0;
+
+      for (const root of roots) {
+        renderedCount += renderTreeNode(
+          root,
+          0,
+          query
+        );
+      }
+
+      if (!renderedCount) {
+        treeEl.innerHTML =
+          '<div class="empty">Nenhum termo encontrado para a pesquisa.</div>';
+      }
+    }
+
+    function renderTreeNode(
+      term,
+      level,
+      query
+    ) {
+      if (
+        query &&
+        !hasMatchingDescendant(term, query)
+      ) {
+        return 0;
+      }
+
+      const children = childrenOf(term.id);
+
+      const expanded =
+        state.expanded.includes(term.id) ||
+        Boolean(query);
+
+      const item =
+        document.createElement("div");
+
+      item.className =
+        "tree-item" +
+        (
+          term.id === state.selectedId
+            ? " selected"
+            : ""
+        );
+
+      item.style.paddingLeft =
+        `${level * 18 + 4}px`;
+
+      const toggle =
+        document.createElement("button");
+
+      toggle.className = "toggle";
+      toggle.type = "button";
+
+      toggle.textContent = children.length
+        ? expanded
+          ? "▾"
+          : "▸"
+        : "•";
+
+      toggle.title = children.length
+        ? expanded
+          ? "Recolher"
+          : "Expandir"
+        : "";
+
+      toggle.onclick = event => {
+        event.stopPropagation();
+
+        if (!children.length) {
+          return;
+        }
+
+        if (
+          state.expanded.includes(term.id)
+        ) {
+          state.expanded =
+            state.expanded.filter(
+              id => id !== term.id
+            );
+        } else {
+          state.expanded.push(term.id);
+        }
+
+        renderTree();
+      };
+
+      const label =
+        document.createElement("button");
+
+      label.className = "term-label";
+      label.type = "button";
+      label.textContent =
+        displayTermName(term);
+
+      label.title = termPath(term);
+
+      label.onclick = () =>
+        openTerm(term.id);
+
+      item.appendChild(toggle);
+      item.appendChild(label);
+
+      const upMatches =
+        matchingUpValues(term, query);
+
+      if (upMatches.length) {
+        const badge =
+          document.createElement("span");
+
+        badge.className =
+          "search-match-badge";
+
+        badge.textContent =
+          `UP: ${upMatches[0]}` +
+          (
+            upMatches.length > 1
+              ? ` +${upMatches.length - 1}`
+              : ""
+          );
+
+        badge.title =
+          upMatches.join("; ");
+
+        item.appendChild(badge);
+      }
+
+      treeEl.appendChild(item);
+
+      let count = 1;
+
+      if (expanded) {
+        const childQuery =
+          query && matchesTerm(term, query)
+            ? ""
+            : query;
+
+        for (const child of children) {
+          count += renderTreeNode(
+            child,
+            level + 1,
+            childQuery
+          );
+        }
+      }
+
+      return count;
+    }
+
+    function renderTermArea() {
+      const term = getTerm(
+        state.selectedId
+      );
+
+      if (!term) {
+        termArea.innerHTML =
+          '<div class="empty">Selecione um termo.</div>';
+
+        return;
+      }
+
+      const parent = getTerm(
+        term.parentId
+      );
+
+      const children = childrenOf(
+        term.id
+      );
+
+      const relatedTerms =
+        (term.relacionados || [])
+          .map(getTerm)
+          .filter(Boolean);
+
+      const naoAutorizados =
+        Array.isArray(
+          term.relacionadosNaoAutorizados
+        )
+          ? term.relacionadosNaoAutorizados
+          : [];
+
+      const links =
+        objetosIndexadosLinks(term);
+
+      termArea.innerHTML = `
+        <div class="term-header">
+          <h1>${escapeHtml(displayTermName(term))}</h1>
+          <div class="muted">${escapeHtml(termPath(term))}</div>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-card">
+            <strong>${children.length.toLocaleString("pt-BR")}</strong>
+            <span>termo(s) específico(s)</span>
+          </div>
+
+          <div class="summary-card">
+            <strong>${relatedTerms.length.toLocaleString("pt-BR")}</strong>
+            <span>termo(s) relacionado(s)</span>
+          </div>
+
+          <div class="summary-card">
+            <strong>${naoAutorizados.length.toLocaleString("pt-BR")}</strong>
+            <span>sinônimo(s) não autorizado(s)</span>
+          </div>
+        </div>
+
+        <div class="accordion-list">
+          <details class="accordion" open>
+            <summary>Definição</summary>
+
+            <div class="accordion-content">
+              <div class="text-block">
+                ${escapeHtml(term.definicao || "—")}
+              </div>
+            </div>
+          </details>
+
+          <details class="accordion">
+            <summary>Notas</summary>
+
+            <div class="accordion-content">
+              <div class="field-block">
+                <span class="field-label">
+                  Nota Explicativa
+                </span>
+
+                <div class="text-block">
+                  ${escapeHtml(term.notaEscopo || "—")}
+                </div>
+              </div>
+
+              <div class="field-block">
+                <span class="field-label">
+                  Nota Histórica
+                </span>
+
+                <div class="text-block">
+                  ${escapeHtml(term.notaUso || "—")}
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <details class="accordion">
+            <summary>Relacionamentos</summary>
+
+            <div class="accordion-content">
+              <div class="field-block">
+                <span class="field-label">
+                  Termo geral
+                </span>
+
+                ${
+                  parent
+                    ? `
+                      <button
+                        class="link-button"
+                        type="button"
+                        data-open-term="${escapeAttr(parent.id)}"
+                      >
+                        ${escapeHtml(displayTermName(parent))}
+                      </button>
+                    `
+                    : '<span class="muted">—</span>'
+                }
+              </div>
+
+              <div class="field-block">
+                <span class="field-label">
+                  Termos específicos
+                </span>
+
+                ${
+                  children.length
+                    ? `
+                      <ul class="small-list">
+                        ${children.map(child => `
+                          <li>
+                            <button
+                              class="link-button"
+                              type="button"
+                              data-open-term="${escapeAttr(child.id)}"
+                            >
+                              ${escapeHtml(displayTermName(child))}
+                            </button>
+                          </li>
+                        `).join("")}
+                      </ul>
+                    `
+                    : '<span class="muted">—</span>'
+                }
+              </div>
+
+              <div class="field-block">
+                <span class="field-label">
+                  Sinônimos não autorizados — UP
+                </span>
+
+                ${
+                  naoAutorizados.length
+                    ? `
+                      <ul class="small-list">
+                        ${naoAutorizados.map(up => `
+                          <li>${escapeHtml(up)}</li>
+                        `).join("")}
+                      </ul>
+                    `
+                    : '<span class="muted">—</span>'
+                }
+              </div>
+
+              <div class="field-block">
+                <span class="field-label">
+                  Descritores autorizados relacionados — TR
+                </span>
+
+                ${
+                  relatedTerms.length
+                    ? `
+                      <ul class="small-list">
+                        ${relatedTerms.map(rel => `
+                          <li>
+                            <button
+                              class="link-button"
+                              type="button"
+                              data-open-term="${escapeAttr(rel.id)}"
+                            >
+                              ${escapeHtml(displayTermName(rel))}
+                            </button>
+                          </li>
+                        `).join("")}
+                      </ul>
+                    `
+                    : '<span class="muted">—</span>'
+                }
+              </div>
+            </div>
+          </details>
+
+          <details class="accordion">
+            <summary>Objetos indexados</summary>
+
+            <div class="accordion-content">
+              <div class="field-block">
+                <span class="field-label">
+                  Objetos indexados no portal da ALMG
+                </span>
+
+                <div class="muted">
+                  Os links usam o termo selecionado como parâmetro de busca.
+                </div>
+
+                <div class="object-links">
+                  <a
+                    href="${escapeAttr(links.normas)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Normas
+                  </a>
+
+                  <a
+                    href="${escapeAttr(links.proposicoes)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Proposições
+                  </a>
+
+                  <a
+                    href="${escapeAttr(links.pronunciamentos)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Pronunciamentos
+                  </a>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      `;
+
+      wireTermArea();
+    }
+
+    function wireTermArea() {
+      termArea
+        .querySelectorAll("[data-open-term]")
+        .forEach(button => {
+          button.onclick = () =>
+            openTerm(button.dataset.openTerm);
+        });
+    }
+
+    function objetosIndexadosLinks(term) {
+      const tag = encodeURIComponent(
+        term?.termo || ""
+      );
+
+      return {
+        normas:
+          `https://www.almg.gov.br/atividade-parlamentar/leis/legislacao-mineira?tag=${tag}`,
+
+        proposicoes:
+          `https://www.almg.gov.br/atividade-parlamentar/projetos-de-lei/?tag=${tag}`,
+
+        pronunciamentos:
+          `https://www.almg.gov.br/atividade-parlamentar/plenario/pronunciamentos?tag=${tag}`
+      };
+    }
+
+    function hasMatchingDescendant(
+      term,
+      query
+    ) {
+      if (!query) {
+        return true;
+      }
+
+      if (matchesTerm(term, query)) {
+        return true;
+      }
+
+      return childrenOf(term.id).some(
+        child =>
+          hasMatchingDescendant(
+            child,
+            query
+          )
+      );
+    }
+
+    function matchesTerm(
+      term,
+      query
+    ) {
+      const normalizedQuery =
+        normalizeSearchText(query);
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      const upTerms =
+        Array.isArray(
+          term.relacionadosNaoAutorizados
+        )
+          ? term.relacionadosNaoAutorizados
+          : [];
+
+      const text = [
+        term.termo,
+        term.termoAnterior,
+        term.conceito,
+        term.definicao,
+        term.notaEscopo,
+        term.notaUso,
+        ...upTerms
+      ].join(" ");
+
+      return normalizeSearchText(text)
+        .includes(normalizedQuery);
+    }
+
+    function matchingUpValues(
+      term,
+      query
+    ) {
+      const normalizedQuery =
+        normalizeSearchText(query);
+
+      if (!normalizedQuery) {
+        return [];
+      }
+
+      const upTerms =
+        Array.isArray(
+          term.relacionadosNaoAutorizados
+        )
+          ? term.relacionadosNaoAutorizados
+          : [];
+
+      return upTerms.filter(up =>
+        normalizeSearchText(up).includes(
+          normalizedQuery
+        )
+      );
+    }
+
+    function normalizeSearchText(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    }
+
+    function normalizeIcmgName(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    }
+
+    function slugIcmg(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .toLowerCase();
+    }
+
+    function isClasseIcmgSemRaiz(classe) {
+      return ICMG_CLASSES_SEM_RAIZ.has(
+        normalizeIcmgName(classe)
+      );
+    }
+
+    function isClasseIcmgDescartada(classe) {
+      return ICMG_CLASSES_DESCARTADAS.has(
+        normalizeIcmgName(classe)
+      );
+    }
+
+    function isTermoIcmgDescartado(termo) {
+      return ICMG_TERMOS_DESCARTADOS.has(
+        normalizeIcmgName(termo)
+      );
+    }
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value);
+    }
+  </script>
+</body>
+</html>
